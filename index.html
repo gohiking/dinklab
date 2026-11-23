@@ -109,6 +109,19 @@ textarea{padding:10px 12px;width:100%;min-height:220px;font-family:ui-monospace,
 .modal .card{width:min(720px,100%);max-height:90vh;overflow:auto}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#24302F;border:1px solid var(--lime);color:var(--text);padding:10px 16px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:30;max-width:90vw}
 #toast.show{opacity:1}
+.chip.sel{outline:2px solid var(--text);outline-offset:1px}
+button.chip{cursor:pointer;font-family:inherit}
+.aitag{font-size:10px;opacity:.65;margin-left:2px;font-family:var(--num)}
+.badge{display:inline-block;font-size:11px;padding:1px 7px;border-radius:4px;background:rgba(255,159,67,.16);color:#FFC48C;margin-left:6px;vertical-align:1px}
+.badge.ok{background:rgba(215,242,92,.14);color:#E4F79A}
+.rlist li.editing{outline:1px solid var(--lime)}
+.timeline .blk.ai{background-image:repeating-linear-gradient(45deg,rgba(14,19,22,.45) 0 4px,transparent 4px 8px)}
+.prog{height:8px;background:var(--panel2);border-radius:999px;overflow:hidden}
+.prog span{display:block;height:100%;width:0;background:var(--lime);transition:width .2s}
+.aibar{position:absolute;left:12px;right:12px;bottom:12px;padding:10px 14px;border-radius:10px;background:rgba(14,19,22,.92);border:1px solid var(--lime);display:flex;align-items:center;gap:12px;font-size:13px}
+.aibar .prog{flex:1;min-width:80px}
+.swatch{display:inline-block;width:12px;height:12px;border-radius:999px;margin-right:6px;vertical-align:-1px;border:1px solid rgba(255,255,255,.3)}
+#aiCard{border-color:rgba(215,242,92,.35)}
 select.inline{min-height:36px;border-radius:8px;border:1px solid var(--line);background:var(--bg);padding:0 8px}
 @media (max-width:640px){main{padding:14px}header.top{padding:10px 14px}.brand .match{display:none}.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
@@ -155,6 +168,7 @@ select.inline{min-height:36px;border-radius:8px;border:1px solid var(--line);bac
           <canvas id="overlay" aria-label="影片畫面：點擊可記錄落點或校正球場"></canvas>
           <div class="hud"><span class="num" id="hudScore"></span><span id="hudRally" style="color:#E4F79A"></span></div>
           <div class="banner" id="banner" hidden></div>
+          <div class="aibar" id="aiBar" hidden><span id="aiText">AI 分析中</span><div class="prog"><span id="aiFill"></span></div><button class="btn small" data-ai="cancel">取消</button></div>
         </div>
         <div class="controls">
           <button class="iconbtn play" id="btnPlay" aria-label="播放 / 暫停（空白鍵）"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path id="playIcon" d="M5 3 L15 9 L5 15 Z" fill="#0E1316"/></svg></button>
@@ -182,22 +196,34 @@ select.inline{min-height:36px;border-radius:8px;border:1px solid var(--line);bac
         <div class="muted" style="margin-top:8px;font-size:13px" id="gamesInfo"></div>
       </div>
 
+      <div class="card" id="aiCard">
+        <h2>AI 自動分析 <span class="muted" style="font-weight:400;font-size:12px">· 在你的瀏覽器裡執行</span></h2>
+        <div id="aiBody"></div>
+      </div>
+
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <h2 style="margin:0" id="curTitle">目前回合</h2>
-          <button class="btn small ghost" id="btnUndo">復原 <kbd>⌫</kbd></button>
+          <h2 style="margin:0" id="curTitle">手動標記</h2>
+          <button class="btn small ghost" id="btnUndo">復原／刪除 <kbd>⌫</kbd></button>
         </div>
         <ol class="chips" id="chips"></ol>
-        <p class="muted" id="curHint" style="margin:8px 0 0;font-size:12px"></p>
+        <p class="muted" id="curHint" style="margin:8px 0 0;font-size:12px;line-height:1.7"></p>
+        <div id="editActions" hidden style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+          <button class="btn small primary" data-edit="confirm">確認並下一個（Enter）</button>
+          <button class="btn small" data-edit="replay">重播</button>
+          <button class="btn small" data-edit="start">開始設為目前時間</button>
+          <button class="btn small" data-edit="end">結束設為目前時間</button>
+          <button class="btn small ghost" data-edit="exit">結束編輯 <kbd>Esc</kbd></button>
+        </div>
         <h3>標記擊球</h3>
         <div class="grid2" id="shotBtns"></div>
-        <h3>擊球者（套用到最後一拍）</h3>
+        <h3>擊球者（套用到選取／最後一拍）</h3>
         <div class="grid4" id="playerBtns"></div>
         <h3>回合結果（以最後一拍的擊球者判定）</h3>
         <div class="grid3" id="outBtns"></div>
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-          <button class="btn small" id="winA">直接判 A 得分</button>
-          <button class="btn small" id="winB">直接判 B 得分</button>
+          <button class="btn small" id="winA">判 A 得分</button>
+          <button class="btn small" id="winB">判 B 得分</button>
         </div>
       </div>
 
@@ -212,7 +238,8 @@ select.inline{min-height:36px;border-radius:8px;border:1px solid var(--line);bac
           <div><kbd>空白</kbd>播放／暫停　<kbd>←</kbd><kbd>→</kbd>逐格　<kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd>跳 5 秒　<kbd>[</kbd><kbd>]</kbd>調速</div>
           <div>擊球：<kbd>S</kbd>發球 <kbd>R</kbd>接發 <kbd>D</kbd>放小球 <kbd>V</kbd>抽球 <kbd>K</kbd>Dink <kbd>Y</kbd>截擊 <kbd>L</kbd>高吊 <kbd>X</kbd>殺球 <kbd>E</kbd>Erne <kbd>A</kbd>ATP <kbd>O</kbd>其他</div>
           <div>擊球者：<kbd>1</kbd>–<kbd>4</kbd>　結果：<kbd>W</kbd>致勝 <kbd>U</kbd>非受迫失誤 <kbd>F</kbd>受迫失誤　<kbd>⌫</kbd>復原　<kbd>C</kbd>校正</div>
-          <div style="margin-top:6px">流程：在擊球瞬間暫停或慢放，按擊球鍵；完成球場校正後，按完擊球鍵再點一下畫面上的落點；回合結束時按 W / U / F，系統會自動記分（雙打 side-out，0-0-2 開局）。</div>
+          <div>編輯回合：<kbd>,</kbd><kbd>.</kbd>切換上一拍／下一拍　<kbd>Enter</kbd>確認並到下一個　<kbd>Esc</kbd>結束編輯</div>
+          <div style="margin-top:6px">建議流程：①球場校正 → ②開始 AI 分析 → ③按「檢查 AI 結果」，每個回合會自動重播；沒問題按 Enter，有錯就點那一拍直接改。系統會依規則自動記分（雙打 side-out，0-0-2 開局）。</div>
         </details>
       </div>
     </aside>
@@ -244,6 +271,13 @@ select.inline{min-height:36px;border-radius:8px;border:1px solid var(--line);bac
         <label class="field">B1<input id="fP2"></label>
         <label class="field" id="fP3w">B2<input id="fP3"></label>
       </div>
+    </div>
+    <div class="card">
+      <h2>AI 設定</h2>
+      <div class="field">球的顏色<div id="ballSeg" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"></div></div>
+      <label class="field" style="margin-top:12px">第一局 A 隊站在哪一邊（之後每局自動換邊）
+        <select id="fANear"><option value="1">近端（靠鏡頭）</option><option value="0">遠端</option></select></label>
+      <p class="muted" style="font-size:12px;margin:12px 0 0;line-height:1.7">AI 效果最好的拍法：腳架固定在底線後方 2–3 公尺高處、整個球場入鏡、不要移動或縮放鏡頭；60fps 更好。球的顏色和地板、衣服差越多越準。</p>
     </div>
     <div class="card">
       <h2>球場校正</h2>
@@ -308,9 +342,10 @@ const uid=()=>Math.random().toString(36).slice(2,10);
 const pct=(a,b)=>b?Math.round(a/b*100)+'%':'—';
 
 const video=$('#video'),canvas=$('#overlay'),ctx=canvas.getContext('2d');
+const AIS={running:false,cancel:false,live:null,progress:0,msg:'',summary:'',pick:false,range:'all',speed:'2'};
 let S=load(),NEXT=null,calibPts=null,stopAt=null,focusId=null,pendingDel=null,showLines=true,tab='analyze',landFilter='all';
 
-function defaults(){return{v:1,match:{teamA:'我方',teamB:'對手',players:['A1','A2','B1','B2'],mode:'doubles',firstServe:'A',videoName:''},calib:null,rallies:[],cur:null};}
+function defaults(){return{v:1,match:{teamA:'我方',teamB:'對手',players:['A1','A2','B1','B2'],mode:'doubles',firstServe:'A',videoName:''},calib:null,rallies:[],cur:null,ai:{ball:'lime',hue:72,aNear:true}};}
 function load(){try{const j=JSON.parse(localStorage.getItem(KEY));if(j&&j.v===1&&Array.isArray(j.rallies))return j;}catch(e){}return defaults();}
 let readOnly=false;
 function save(){if(readOnly)return;try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
@@ -393,6 +428,12 @@ function drawOverlay(){
     ctx.stroke();
     ctx.strokeStyle='#FFFFFF';ctx.lineWidth=3*dpr;ctx.beginPath();L(-1,22,21,22);ctx.stroke();
   }
+  if(AIS.running&&AIS.live){
+    ctx.lineWidth=2*dpr;
+    AIS.live.P.forEach(p=>{ctx.strokeStyle='rgba(90,176,255,.95)';ctx.strokeRect(p[2]*W,p[3]*H,(p[4]-p[2])*W,(p[5]-p[3])*H);});
+    AIS.live.B.forEach((b,i)=>{ctx.strokeStyle=i?'rgba(255,159,67,.55)':'#FF9F43';ctx.lineWidth=(i?1.5:2.5)*dpr;ctx.beginPath();ctx.arc(b[0]*W,b[1]*H,(i?6:10)*dpr,0,7);ctx.stroke();});
+    return;
+  }
   const r=S.cur||S.rallies.find(x=>x.id===focusId);
   if(r){
     const st=S.cur?NEXT.serving:r.serveTeam;
@@ -413,8 +454,8 @@ function loadVideo(f){
 }
 video.addEventListener('loadedmetadata',()=>{
   if(video.videoWidth)$('#stage').style.aspectRatio=video.videoWidth+' / '+video.videoHeight;
-  requestAnimationFrame(()=>{drawOverlay();renderTimeline();});
-  if(!S.calib)toast('先按「球場校正」點出四個角，才能記錄落點');
+  requestAnimationFrame(()=>{drawOverlay();renderTimeline();});renderAI();
+  if(!S.calib)toast('第一步：點「開始球場校正」標出球場四個角');
 });
 video.addEventListener('error',()=>toast('這個影片格式瀏覽器無法播放，請轉成 MP4 (H.264) 再試'));
 video.addEventListener('timeupdate',()=>{
@@ -434,69 +475,104 @@ function setSpeed(v){video.playbackRate=v;renderSpeeds();}
 function changeSpeed(dir){const i=SPEEDS.indexOf(video.playbackRate);const j=Math.max(0,Math.min(SPEEDS.length-1,(i<0?2:i)+dir));setSpeed(SPEEDS[j]);toast('速度 '+SPEEDS[j]+'x');}
 function playRally(r){
   if(!video.src){toast('請先選擇影片');return;}
-  switchTab('analyze');focusId=r.id;video.currentTime=r.start;stopAt=r.end;video.play().catch(()=>{});renderTimeline();drawOverlay();
+  editId=null;selShot=null;switchTab('analyze');focusId=r.id;video.currentTime=r.start;stopAt=r.end;video.play().catch(()=>{});renderTimeline();drawOverlay();
 }
 
-/* ---------- 標記 ---------- */
+/* ---------- 標記與編輯 ---------- */
+let editId=null,selShot=null;
+const editRally=()=>editId?S.rallies.find(r=>r.id===editId)||null:null;
 function needVideo(){if(!video.src){toast('請先選擇影片');return true;}return false;}
+function busy(){if(AIS.running){toast('AI 分析中，請稍候或先取消');return true;}return false;}
 function ensureCur(){if(!S.cur){S.cur={id:uid(),start:Math.max(0,video.currentTime-1),shots:[]};focusId=null;}}
+function touch(r){if(r&&r.ai)r.edited=true;}
 function addShot(type){
-  if(ro()||needVideo())return;ensureCur();
-  S.cur.shots.push({t:video.currentTime,type,player:null,land:null});
-  commit();
+  if(ro()||busy()||needVideo())return;
+  const r=editRally();
+  if(r){
+    if(selShot!=null&&r.shots[selShot]){const s=r.shots[selShot];s.type=type;s.ai=false;}
+    else{const t=video.currentTime;const s={t,type,player:null,land:null};r.shots.push(s);r.shots.sort((a,b)=>a.t-b.t);selShot=r.shots.indexOf(s);r.start=Math.min(r.start,t-0.5);r.end=Math.max(r.end||t,t+0.5);}
+    touch(r);commit();return;
+  }
+  ensureCur();S.cur.shots.push({t:video.currentTime,type,player:null,land:null});commit();
 }
+function targetShot(){const r=editRally();if(r)return selShot!=null?r.shots[selShot]||null:null;return S.cur&&S.cur.shots.length?S.cur.shots[S.cur.shots.length-1]:null;}
 function setPlayer(n){
-  if(ro())return;
-  const p=slots()[n-1];if(p==null)return;
-  if(!S.cur||!S.cur.shots.length){toast('先標記一拍，再指定擊球者');return;}
-  const s=S.cur.shots[S.cur.shots.length-1];s.player=s.player===p?null:p;commit();
+  if(ro()||busy())return;const p=slots()[n-1];if(p==null)return;
+  const s=targetShot();if(!s){toast(editId?'先點選要修改的那一拍':'先標記一拍，再指定擊球者');return;}
+  s.player=s.player===p?null:p;touch(editRally());commit();
 }
 function endRally(o){
-  if(ro())return;
+  if(ro()||busy())return;
+  const r=editRally();
+  if(r){if(!r.shots.length){toast('這個回合沒有擊球');return;}r.outcome=o;delete r.manualWinner;touch(r);commit();toast('結果：'+OUT[o]+' → '+teamName(r.winner)+' 得分');return;}
   if(!S.cur||!S.cur.shots.length){toast('先標記至少一拍');return;}
   S.cur.outcome=o;S.cur.end=Math.max(video.currentTime+0.5,S.cur.start+0.5);
-  const r=S.cur;S.rallies.push(r);S.cur=null;commit();
-  toast(OUT[o]+' → '+teamName(r.winner)+' 贏得這一分');
+  const c=S.cur;S.rallies.push(c);S.cur=null;commit();
+  toast(OUT[o]+' → '+teamName(c.winner)+' 贏得這一分');
 }
 function manualWin(t){
-  if(ro()||needVideo())return;ensureCur();
-  S.cur.manualWinner=t;S.cur.outcome=null;S.cur.end=Math.max(video.currentTime+0.5,S.cur.start+0.5);
+  if(ro()||busy()||needVideo())return;
+  const r=editRally();
+  if(r){r.manualWinner=t;r.outcome=null;touch(r);commit();toast('改為 '+teamName(t)+' 得分');return;}
+  ensureCur();S.cur.manualWinner=t;S.cur.outcome=null;S.cur.end=Math.max(video.currentTime+0.5,S.cur.start+0.5);
   S.rallies.push(S.cur);S.cur=null;commit();toast(teamName(t)+' 贏得這一分');
 }
 function undo(){
-  if(ro())return;
-  if(S.cur){S.cur.shots.pop();if(!S.cur.shots.length)S.cur=null;}
-  else if(S.rallies.length){
-    let idx=S.rallies.length-1;
-    const r=S.rallies.splice(idx,1)[0];delete r.outcome;delete r.manualWinner;delete r.end;
-    if(!r.shots.length){commit();toast('已刪除最後一個回合');return;}
-    S.cur=r;toast('已重新打開最後一個回合');
-  }
+  if(ro()||busy())return;
+  const r=editRally();
+  if(r){if(selShot==null||!r.shots[selShot]){toast('先點選要刪除的那一拍');return;}r.shots.splice(selShot,1);selShot=r.shots.length?Math.min(selShot,r.shots.length-1):null;touch(r);commit();toast('已刪除這一拍');return;}
+  if(S.cur){S.cur.shots.pop();if(!S.cur.shots.length)S.cur=null;commit();return;}
+  toast('要修改已完成的回合，請在回合列表按「編輯」');
+}
+function deleteRally(id){if(ro())return;if(editId===id){editId=null;selShot=null;}S.rallies=S.rallies.filter(r=>r.id!==id);if(focusId===id)focusId=null;commit();toast('已刪除回合');}
+function enterEdit(r,autoplay){
+  if(ro()||busy()||!r)return;
+  if(S.cur&&S.cur.shots.length){toast('請先結束目前正在標記的回合');return;}
+  S.cur=null;editId=r.id;selShot=null;focusId=r.id;if(tab!=='analyze')switchTab('analyze');
+  if(video.src){video.currentTime=r.start;if(autoplay!==false){stopAt=r.end;video.play().catch(()=>{});}else video.pause();}
   commit();
 }
-function deleteRally(id){if(ro())return;S.rallies=S.rallies.filter(r=>r.id!==id);if(focusId===id)focusId=null;commit();toast('已刪除回合');}
+function exitEdit(){editId=null;selShot=null;commit();}
+function selectShot(i){const r=editRally();if(!r||!r.shots[i])return;selShot=selShot===i?null:i;if(selShot!=null&&video.src){video.pause();seek(r.shots[i].t-0.15);}commit();}
+function stepShot(d){const r=editRally();if(!r||!r.shots.length)return;const i=selShot==null?(d>0?0:r.shots.length-1):Math.max(0,Math.min(r.shots.length-1,selShot+d));selShot=null;selectShot(i);}
+function confirmNext(){
+  const r=editRally();if(!r)return;r.ok=true;
+  const idx=S.rallies.indexOf(r);const nx=S.rallies.slice(idx+1).find(x=>x.ai&&!x.ok)||S.rallies.find(x=>x.ai&&!x.ok&&x!==r);
+  if(nx){toast('已確認，前往下一個待檢查的回合');enterEdit(nx);}else{editId=null;selShot=null;commit();toast('所有 AI 回合都確認完了！');}
+}
+function startReview(){const r=S.rallies.find(x=>x.ai&&!x.ok);if(r)enterEdit(r);else toast('沒有待確認的 AI 回合');}
+function setRallyEdge(which){const r=editRally();if(!r||!video.src)return;const t=video.currentTime;
+  if(which==='start')r.start=Math.min(t,r.shots.length?r.shots[0].t:t);else r.end=Math.max(t,r.shots.length?r.shots[r.shots.length-1].t:t);
+  commit();toast(which==='start'?'已設定回合開始時間':'已設定回合結束時間');}
 
 /* ---------- 校正與點擊 ---------- */
 function startCalib(){
-  if(needVideo())return;video.pause();calibPts=[];switchTab('analyze');updateBanner();drawOverlay();
+  if(needVideo()||busy())return;video.pause();AIS.pick=false;calibPts=[];if(tab!=='analyze')switchTab('analyze');updateBanner();drawOverlay();
 }
 function updateBanner(){
-  const b=$('#banner');
+  const b=$('#banner');const r=editRally();
   if(calibPts){b.hidden=false;b.textContent='球場校正：點選「'+CORNER_NAMES[calibPts.length]+'」角（'+(calibPts.length+1)+'/4）· Esc 取消';}
+  else if(AIS.pick){b.hidden=false;b.textContent='點一下畫面中的球，設定球的顏色 · Esc 取消';}
+  else if(AIS.running){b.hidden=true;}
+  else if(r&&selShot!=null&&S.calib){b.hidden=false;b.textContent='點擊畫面可修改第 '+(selShot+1)+' 拍的落點';}
   else if(S.cur&&S.cur.shots.length&&S.calib&&!S.cur.shots[S.cur.shots.length-1].land){b.hidden=false;b.textContent='點擊畫面記錄第 '+S.cur.shots.length+' 拍的落點（可略過）';}
   else b.hidden=true;
 }
 canvas.addEventListener('click',e=>{
+  if(AIS.running)return;
   const rc=canvas.getBoundingClientRect();const u=(e.clientX-rc.left)/rc.width,v=(e.clientY-rc.top)/rc.height;
   if(calibPts){
     calibPts.push([u,v]);
-    if(calibPts.length===4){const ok=setCalib(calibPts);calibPts=null;commit();toast(ok?'校正完成！球場線已疊在畫面上':'校正失敗，請按順序重新點四個角');}
+    if(calibPts.length===4){const ok=setCalib(calibPts);calibPts=null;commit();toast(ok?'校正完成！可以開始 AI 分析了':'校正失敗，請按順序重新點四個角');}
     else{updateBanner();drawOverlay();}
     return;
   }
-  if(S.cur&&S.cur.shots.length&&S.calib){
-    const s=S.cur.shots[S.cur.shots.length-1];const c=applyH(S.calib.Hi,u,v);
-    s.land=[Math.round(c[0]*10)/10,Math.round(c[1]*10)/10];commit();
+  if(AIS.pick){pickColor(u,v);return;}
+  const r=editRally();
+  const s=r?(selShot!=null?r.shots[selShot]:null):(S.cur&&S.cur.shots.length?S.cur.shots[S.cur.shots.length-1]:null);
+  if(s&&S.calib&&!readOnly){
+    const c=applyH(S.calib.Hi,u,v);
+    s.land=[Math.round(c[0]*10)/10,Math.round(c[1]*10)/10];touch(r);commit();
     toast(inCourt(s.land)?(inKitchen(s.land)?'落點：廚房區內':'落點已記錄'):'落點：出界');return;
   }
   togglePlay();
@@ -507,8 +583,8 @@ function commit(){NEXT=replay();save();renderAll();scheduleCloud();}
 function renderAll(){
   $('#matchTitle').textContent=(S.match.teamA||'A')+' vs '+(S.match.teamB||'B')+(S.match.videoName?' · '+S.match.videoName:'');
   $('#lgA').textContent=teamName('A');$('#lgB').textContent=teamName('B');
-  $('#winA').textContent='直接判 '+teamName('A')+' 得分';$('#winB').textContent='直接判 '+teamName('B')+' 得分';
-  renderScore();renderCur();renderPlayers();renderRallyList();renderTimeline();updateBanner();drawOverlay();
+  $('#winA').textContent='判 '+teamName('A')+' 得分';$('#winB').textContent='判 '+teamName('B')+' 得分';
+  renderScore();renderCur();renderPlayers();renderRallyList();renderTimeline();updateBanner();drawOverlay();renderAI();
   if(tab==='report')renderReport();
   if(tab==='setup')renderSetup();
 }
@@ -516,22 +592,36 @@ function renderScore(){
   const n=NEXT;$('#bigScore').textContent=callScore(n.sc,n.serving,n.num);
   $('#serveInfo').textContent='發球：'+teamName(n.serving)+(isDoubles()?'（第 '+n.num+' 發球員）':'');
   $('#gamesInfo').textContent='第 '+n.game+' 局 · 局數 '+teamName('A')+' '+n.games.A+' : '+n.games.B+' '+teamName('B');
-  $('#hudScore').textContent=callScore(n.sc,n.serving,n.num);
-  $('#hudRally').textContent=S.cur?'回合進行中 · 第 '+S.cur.shots.length+' 拍':'回合 '+(S.rallies.length+1)+' 待開始';
+  const r=editRally();
+  $('#hudScore').textContent=r?callScore(r.before,r.serveTeam,r.serverNum):callScore(n.sc,n.serving,n.num);
+  $('#hudRally').textContent=r?'編輯回合 #'+(S.rallies.indexOf(r)+1):(S.cur?'回合進行中 · 第 '+S.cur.shots.length+' 拍':'回合 '+(S.rallies.length+1)+' 待開始');
+}
+function chipHtml(r,s,i,st,btn){
+  const t=shotTeam(r,i,st);
+  const inner='<span class="n">'+(i+1)+'</span>'+esc(SHOT_LABEL[s.type])+(s.player!=null?' · '+esc(pName(s.player)):'')+(s.land?(inKitchen(s.land)?' ●廚':' ●'):'')+(s.ai?'<small class="aitag">AI</small>':'');
+  return btn?'<li><button class="chip '+t+(i===selShot?' sel':'')+'" data-sel="'+i+'" aria-pressed="'+(i===selShot)+'">'+inner+'</button></li>':'<li class="chip '+t+'">'+inner+'</li>';
 }
 function renderCur(){
-  const ol=$('#chips');
-  $('#curTitle').textContent=S.cur?'目前回合 · '+S.cur.shots.length+' 拍':'目前回合';
-  if(!S.cur){ol.innerHTML='';$('#curHint').textContent='在擊球瞬間按擊球鍵（例如 S 發球）就會開始新回合。';return;}
-  ol.innerHTML=S.cur.shots.map((s,i)=>{const t=shotTeam(S.cur,i,NEXT.serving);
-    return '<li class="chip '+t+'"><span class="n">'+(i+1)+'</span>'+esc(SHOT_LABEL[s.type])+(s.player!=null?' · '+esc(pName(s.player)):'')+(s.land?(inKitchen(s.land)?' ●廚':' ●'):'')+'</li>';}).join('');
-  $('#curHint').textContent=S.calib?'按完擊球鍵可點畫面記錄落點；按 1–4 指定擊球者。':'完成球場校正後即可記錄落點。';
+  const ol=$('#chips'),r=editRally(),hint=$('#curHint');
+  $('#editActions').hidden=!r;
+  if(r){
+    $('#curTitle').textContent='編輯回合 #'+(S.rallies.indexOf(r)+1)+' · '+r.shots.length+' 拍';
+    ol.innerHTML=r.shots.map((s,i)=>chipHtml(r,s,i,r.serveTeam,true)).join('');
+    const res=r.manualWinner?'手動判定：'+teamName(r.manualWinner)+' 得分':(r.outcome?OUT[r.outcome]+' → '+teamName(r.winner)+' 得分':'結果未定（請按 W / U / F）');
+    hint.innerHTML='<b>'+esc(res)+'</b>'+(r.ai&&!r.ok?' <span class="badge">AI 待確認</span>':(r.ok?' <span class="badge ok">已確認</span>':''))+
+      (r.notes&&r.notes.length&&!r.ok?'<br><span style="color:#FFC48C">⚠ '+r.notes.map(esc).join('；')+'</span>':'')+
+      '<br>'+(selShot!=null?'已選第 '+(selShot+1)+' 拍：按擊球鍵改類型、1–4 改擊球者、點畫面改落點、⌫ 刪除這拍。':'點一拍來修改（, . 鍵切換）；沒選任何一拍時，按擊球鍵會在目前時間新增一拍。');
+    return;
+  }
+  $('#curTitle').textContent=S.cur?'目前回合 · '+S.cur.shots.length+' 拍':'手動標記';
+  if(!S.cur){ol.innerHTML='';hint.textContent='想自己標記：在擊球瞬間按擊球鍵（例如 S 發球）就會開始新回合。';return;}
+  ol.innerHTML=S.cur.shots.map((s,i)=>chipHtml(S.cur,s,i,NEXT.serving,false)).join('');
+  hint.textContent=S.calib?'按完擊球鍵可點畫面記錄落點；按 1–4 指定擊球者。':'完成球場校正後即可記錄落點。';
 }
 function renderPlayers(){
-  const sl=slots();
+  const sl=slots(),ts=targetShot();
   $('#playerBtns').innerHTML=sl.map((p,i)=>{
-    const last=S.cur&&S.cur.shots.length?S.cur.shots[S.cur.shots.length-1]:null;
-    const on=last&&last.player===p;
+    const on=ts&&ts.player===p;
     return '<button class="keybtn p'+pTeam(p)+(on?' on':'')+'" data-player="'+(i+1)+'"><span style="color:'+(pTeam(p)==='A'?'#E4F79A':'#A9D4FF')+'">'+esc(pName(p))+'</span><kbd>'+(i+1)+'</kbd></button>';}).join('');
   $('#playerBtns').className=sl.length===4?'grid4':'grid2';
 }
@@ -539,26 +629,29 @@ function renderSpeeds(){
   $('#speeds').innerHTML=SPEEDS.map(s=>'<button data-speed="'+s+'" aria-pressed="'+(video.playbackRate===s)+'">'+s+'x</button>').join('');
 }
 function renderRallyList(){
-  $('#rCount').textContent=S.rallies.length?'· '+S.rallies.length:'';
+  const pend=S.rallies.filter(r=>r.ai&&!r.ok).length;
+  $('#rCount').textContent=S.rallies.length?'· '+S.rallies.length+(pend?'（'+pend+' 個待確認）':''):'';
   const ul=$('#rallyList');
-  if(!S.rallies.length){ul.innerHTML='<li class="muted" style="background:none;padding:4px 0">還沒有完成的回合</li>';return;}
-  ul.innerHTML=S.rallies.map((r,i)=>({r,i})).reverse().map(({r,i})=>{
+  if(!S.rallies.length){ul.innerHTML='<li class="muted" style="background:none;padding:4px 0">還沒有回合。按上方「開始 AI 分析」自動產生，或手動標記。</li>';return;}
+  ul.innerHTML=S.rallies.map((r,i)=>({r,i})).map(({r,i})=>{
     const last=r.shots.length?r.shots[r.shots.length-1]:null;
     const who=last&&last.player!=null?' · '+esc(pName(last.player)):'';
-    const desc=r.manualWinner?'手動判定':(OUT[r.outcome]||'未完成')+who;
-    return '<li><span class="dot '+(r.winner||'N')+'"></span><div class="info"><b>#'+(i+1)+'</b> <span class="num">'+callScore(r.before,r.serveTeam,r.serverNum)+'</span> · '+r.shots.length+' 拍<small>'+desc+' · '+fmt(r.start)+(r.gameEnd?' · 本局結束':'')+'</small></div>'+
-      '<button class="btn small" data-play="'+r.id+'" aria-label="播放回合 '+(i+1)+'">播放</button>'+
+    const desc=r.manualWinner?'手動判定':(OUT[r.outcome]||'結果未定')+who;
+    const pendR=r.ai&&!r.ok;
+    return '<li class="'+(r.id===editId?'editing':'')+'"><span class="dot '+(r.winner||'N')+'"></span><div class="info"><b>#'+(i+1)+'</b> <span class="num">'+callScore(r.before,r.serveTeam,r.serverNum)+'</span> · '+r.shots.length+' 拍'+(pendR?'<span class="badge">AI 待確認</span>':'')+'<small>'+desc+' · '+fmt(r.start)+(r.gameEnd?' · 本局結束':'')+'</small></div>'+
+      '<button class="btn small'+(pendR?' primary':'')+'" data-editr="'+r.id+'" aria-label="編輯回合 '+(i+1)+'">'+(pendR?'檢查':'編輯')+'</button>'+
       '<button class="btn small ghost danger" data-del="'+r.id+'" aria-label="刪除回合 '+(i+1)+'">'+(pendingDel===r.id?'確定刪除':'刪除')+'</button></li>';}).join('');
+  const cur=ul.querySelector('.editing');if(cur&&cur.scrollIntoView){const top=cur.offsetTop-ul.offsetTop;if(top<ul.scrollTop||top>ul.scrollTop+ul.clientHeight-40)ul.scrollTop=top-60;}
 }
 function renderTimeline(){
   const tl=$('#timeline'),d=duration();
   [...tl.querySelectorAll('.blk,.cur')].forEach(n=>n.remove());
   const done=S.rallies.reduce((a,r)=>a+((r.end||0)-r.start),0);
-  $('#tlInfo').textContent=S.rallies.length?'· '+S.rallies.length+' 個回合，實際對打 '+fmt(done)+(d?' / 影片 '+fmt(d):''):'· 標記後會顯示在這裡';
+  $('#tlInfo').textContent=S.rallies.length?'· '+S.rallies.length+' 個回合，實際對打 '+fmt(done)+(d?' / 影片 '+fmt(d):''):'· 分析或標記後會顯示在這裡';
   if(!d)return;
-  S.rallies.forEach((r,i)=>{const b=document.createElement('button');b.className='blk '+(r.winner||'N')+(r.id===focusId?' focus':'');
+  S.rallies.forEach((r,i)=>{const b=document.createElement('button');b.className='blk '+(r.winner||'N')+(r.id===focusId?' focus':'')+(r.ai&&!r.ok?' ai':'');
     b.style.left=(r.start/d*100)+'%';b.style.width=(Math.max(0.3,((r.end||r.start+1)-r.start)/d*100))+'%';
-    b.setAttribute('aria-label','回合 '+(i+1)+'，'+r.shots.length+' 拍');b.title='#'+(i+1)+' · '+r.shots.length+' 拍';b.dataset.play=r.id;tl.appendChild(b);});
+    b.setAttribute('aria-label','回合 '+(i+1)+'，'+r.shots.length+' 拍');b.title='#'+(i+1)+' · '+r.shots.length+' 拍'+(r.ai&&!r.ok?' · AI 待確認':'');b.dataset.editr=r.id;tl.appendChild(b);});
   if(S.cur){const c=document.createElement('div');c.className='cur';c.style.left=(S.cur.start/d*100)+'%';c.style.width=Math.max(0.3,(Math.max(video.currentTime,S.cur.start+1)-S.cur.start)/d*100)+'%';tl.appendChild(c);}
   updateTime();
 }
@@ -604,6 +697,8 @@ function renderReport(){
   const tile=(l,v,s)=>'<div class="card kpi"><div class="l">'+l+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div></div>';
   const vs=(a,b)=>'<span style="color:#D7F25C">'+a+'</span> <span class="muted" style="font-size:20px">:</span> <span style="color:#5AB0FF">'+b+'</span>';
   let h='<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;align-items:flex-end"><div><p class="muted" style="margin:0 0 6px">'+esc(S.match.videoName||'')+' · '+(isDoubles()?'雙打':'單打')+' · '+R.length+' 個回合</p><h1 style="margin:0;font-size:28px">比賽報告 · '+esc(A)+' vs '+esc(B)+'</h1></div></div>';
+  const pendN=S.rallies.filter(r=>r.ai&&!r.ok).length;
+  if(pendN)h+='<div class="card" style="border-color:rgba(255,159,67,.5);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><span>有 <b>'+pendN+'</b> 個 AI 產生的回合還沒確認，下面的數據可能不準。</span><button class="btn" data-ai="review">去檢查</button></div>';
   h+='<div class="kpis">'+
     tile('局數 / 目前比分',vs(n.games.A,n.games.B),'目前 '+callScore(n.sc,n.serving,n.num))+
     tile('平均回合拍數',(st.shotsTotal/R.length).toFixed(1),'最長 '+st.maxLen+' 拍')+
@@ -646,6 +741,11 @@ function renderSetup(){
   set('#fTeamA',m.teamA);set('#fTeamB',m.teamB);set('#fMode',m.mode);set('#fFirst',m.firstServe);
   [0,1,2,3].forEach(i=>set('#fP'+i,m.players[i]||''));
   $('#fP1w').hidden=$('#fP3w').hidden=!isDoubles();
+  const c=aiCfg();
+  $('#ballSeg').innerHTML=Object.keys(BALLS).map(k=>'<button class="btn small" data-ball="'+k+'" aria-pressed="'+(c.ball===k)+'"><span class="swatch" style="background:'+BALLS[k].css+'"></span>'+BALLS[k].label+'</button>').join('')+
+    (c.ball==='custom'?'<button class="btn small" data-ball="custom" aria-pressed="true"><span class="swatch" style="background:'+(c.css||'#ccc')+'"></span>自訂</button>':'')+
+    '<button class="btn small" data-ball="pick">從影片點選球</button>';
+  set('#fANear',c.aNear?'1':'0');
   $('#calibStatus').textContent=S.calib?'已校正。換了拍攝角度或影片時請重新校正。':'尚未校正。校正後才能記錄落點、畫出球場線。';
 }
 [['#fTeamA','teamA'],['#fTeamB','teamB'],['#fMode','mode'],['#fFirst','firstServe']].forEach(([id,k])=>$(id).addEventListener('input',e=>{S.match[k]=e.target.value;commit();}));
@@ -656,6 +756,7 @@ $('#btnReset').addEventListener('click',e=>{
   if(!resetArm){resetArm=true;e.target.textContent='再按一次確認清除';setTimeout(()=>{resetArm=false;e.target.textContent='清除全部標記';},3000);return;}
   resetArm=false;e.target.textContent='清除全部標記';S.rallies=[];S.cur=null;focusId=null;commit();toast('已清除全部標記');
 });
+$('#fANear').addEventListener('input',e=>{aiCfg().aNear=e.target.value==='1';commit();});
 $('#btnCalib2').addEventListener('click',()=>{switchTab('analyze');startCalib();});
 
 /* ---------- 匯出匯入 ---------- */
@@ -678,7 +779,7 @@ async function copy(text){
 const baseName=()=>(S.match.teamA+'_vs_'+S.match.teamB).replace(/[^\w一-鿿-]+/g,'_');
 function openModal(){$('#mText').value=JSON.stringify(S,null,1);$('#modal').hidden=false;$('#mClose').focus();}
 function closeModal(){$('#modal').hidden=true;}
-function importText(txt){try{const j=JSON.parse(txt);if(!j||j.v!==1||!Array.isArray(j.rallies))throw 0;S=j;S.cur=S.cur||null;commit();closeModal();toast('匯入成功：'+S.rallies.length+' 個回合');}catch(e){toast('格式不正確，無法匯入');}}
+function importText(txt){try{const j=JSON.parse(txt);if(!j||j.v!==1||!Array.isArray(j.rallies))throw 0;S=j;S.cur=S.cur||null;editId=null;selShot=null;commit();closeModal();toast('匯入成功：'+S.rallies.length+' 個回合');}catch(e){toast('格式不正確，無法匯入');}}
 $('#btnData').addEventListener('click',openModal);$('#mClose').addEventListener('click',closeModal);
 $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal();});
 $('#mCopy').addEventListener('click',()=>copy($('#mText').value));
@@ -703,6 +804,11 @@ $('#shotBtns').innerHTML=SHOTS.map(s=>'<button class="keybtn" data-shot="'+s.id+
 $('#outBtns').innerHTML=Object.keys(OUT).map(k=>'<button class="keybtn" data-out="'+k+'" style="font-size:13px">'+OUT[k]+'<kbd>'+k+'</kbd></button>').join('');
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.sel!=null){selectShot(+b.dataset.sel);return;}
+  if(b.dataset.editr){const r=S.rallies.find(x=>x.id===b.dataset.editr);if(r)enterEdit(r);return;}
+  if(b.dataset.edit){const a=b.dataset.edit;if(a==='confirm')confirmNext();else if(a==='exit')exitEdit();else if(a==='start'||a==='end')setRallyEdge(a);else if(a==='replay'){const r=editRally();if(r&&video.src){video.currentTime=r.start;stopAt=r.end;video.play().catch(()=>{});}}return;}
+  if(b.dataset.ai){const a=b.dataset.ai;if(a==='run')runAI();else if(a==='cancel'){AIS.cancel=true;}else if(a==='calib')startCalib();else if(a==='review')startReview();return;}
+  if(b.dataset.ball){const c=aiCfg();if(b.dataset.ball==='pick'){startPick();return;}c.ball=b.dataset.ball;commit();return;}
   if(b.dataset.shot)addShot(b.dataset.shot);
   else if(b.dataset.out)endRally(b.dataset.out);
   else if(b.dataset.player)setPlayer(+b.dataset.player);
@@ -710,6 +816,7 @@ document.addEventListener('click',e=>{
   else if(b.dataset.play){const r=S.rallies.find(x=>x.id===b.dataset.play);if(r)playRally(r);}
   else if(b.dataset.del){if(pendingDel===b.dataset.del){pendingDel=null;deleteRally(b.dataset.del);}else{pendingDel=b.dataset.del;renderRallyList();setTimeout(()=>{if(pendingDel===b.dataset.del){pendingDel=null;renderRallyList();}},3000);}}
 });
+$('#aiBody').addEventListener('change',e=>{if(e.target.id==='aiRange')AIS.range=e.target.value;if(e.target.id==='aiSpeed')AIS.speed=e.target.value;});
 $('#report').addEventListener('change',e=>{if(e.target.id==='landSel'){landFilter=e.target.value;renderReport();}});
 $('#timeline').addEventListener('click',e=>{if(e.target.id!=='timeline')return;const rc=e.currentTarget.getBoundingClientRect(),d=duration();if(d&&video.src)seek((e.clientX-rc.left)/rc.width*d);});
 $('#btnPlay').addEventListener('click',togglePlay);
@@ -731,11 +838,18 @@ document.addEventListener('keydown',e=>{
   if(!$('#cloudModal').hidden){if(e.key==='Escape')closeCloud();return;}
   if(tab!=='analyze')return;
   const k=e.key.length===1?e.key.toLowerCase():e.key;
+  if(AIS.running){if(k==='Escape')AIS.cancel=true;return;}
+  if(editId){
+    if(k==='Enter'){e.preventDefault();confirmNext();return;}
+    if(k===','){stepShot(-1);return;}if(k==='.'){stepShot(1);return;}
+    if(k==='Delete'){e.preventDefault();undo();return;}
+    if(k==='Escape'&&!calibPts&&!AIS.pick){exitEdit();return;}
+  }
   if(k===' '){e.preventDefault();togglePlay();return;}
   if(k==='ArrowLeft'||k==='ArrowRight'){e.preventDefault();if(!video.src)return;video.pause();seek(video.currentTime+(e.shiftKey?5:1/30)*(k==='ArrowLeft'?-1:1));return;}
   if(k==='['){changeSpeed(-1);return;}if(k===']'){changeSpeed(1);return;}
   if(k==='Backspace'){e.preventDefault();undo();return;}
-  if(k==='Escape'){if(calibPts){calibPts=null;updateBanner();drawOverlay();toast('已取消校正');}return;}
+  if(k==='Escape'){if(calibPts){calibPts=null;updateBanner();drawOverlay();toast('已取消校正');}else if(AIS.pick){AIS.pick=false;updateBanner();}return;}
   if(k==='c'){startCalib();return;}
   const sh=SHOTS.find(s=>s.key===k);if(sh){e.preventDefault();addShot(sh.id);return;}
   if(k==='w'||k==='u'||k==='f'){endRally(k.toUpperCase());return;}
@@ -743,6 +857,324 @@ document.addEventListener('keydown',e=>{
 });
 if(window.ResizeObserver)new ResizeObserver(()=>drawOverlay()).observe($('#stage'));
 window.addEventListener('resize',drawOverlay);
+
+/* ---------- AI 自動分析（瀏覽器端電腦視覺） ---------- */
+const BALLS={lime:{label:'螢光黃綠',hue:72,css:'#C8F03C'},yellow:{label:'黃色',hue:52,css:'#F2D53C'},orange:{label:'橘色',hue:26,css:'#FF8A2A'},white:{label:'白色',hue:null,css:'#F2F2F2'}};
+function aiCfg(){if(!S.ai)S.ai={};if(!S.ai.ball)S.ai.ball='lime';if(S.ai.hue==null)S.ai.hue=BALLS.lime.hue;if(S.ai.aNear==null)S.ai.aNear=true;return S.ai;}
+function rgb2hsv(r,g,b){r/=255;g/=255;b/=255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;let h=0;if(d){if(mx===r)h=((g-b)/d)%6;else if(mx===g)h=(b-r)/d+2;else h=(r-g)/d+4;h*=60;if(h<0)h+=360;}return[h,mx?d/mx:0,mx];}
+function ballMatcher(){
+  const c=aiCfg();
+  if(c.ball==='white')return(r,g,b)=>{const mx=Math.max(r,g,b),mn=Math.min(r,g,b);return mx>185&&mx-mn<50;};
+  const H=c.ball==='custom'?c.hue:BALLS[c.ball].hue;
+  return(r,g,b)=>{const q=rgb2hsv(r,g,b);let dh=Math.abs(q[0]-H);if(dh>180)dh=360-dh;return dh<28&&q[1]>0.28&&q[2]>0.35;};
+}
+function ballLabel(){const c=aiCfg();return c.ball==='custom'?'自訂（從影片取色）':BALLS[c.ball].label;}
+function teamSide(t,game){const aNear=aiCfg().aNear?(game%2===1):(game%2===0);return((t==='A')===aNear)?'near':'far';}
+function seekTo(t){return new Promise(res=>{let done=false;const f=()=>{if(done)return;done=true;video.removeEventListener('seeked',f);res();};video.addEventListener('seeked',f);video.currentTime=t;setTimeout(f,4000);});}
+function pip(x,y,poly){let c=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b=poly[j];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])c=!c;}return c;}
+function buildROI(pw,ph){
+  const H=S.calib.H,pts=[[-5,-6],[25,-6],[25,50],[-5,50]];let poly;
+  if(pts.every(p=>H[6]*p[0]+H[7]*p[1]+H[8]>1e-6)){poly=pts.map(p=>applyH(H,p[0],p[1]));poly[2][1]-=0.28;poly[3][1]-=0.28;}
+  else poly=[[0,0],[1,0],[1,1],[0,1]];
+  const roi=new Uint8Array(pw*ph);
+  for(let y=0;y<ph;y++){const v=(y+0.5)/ph;for(let x=0;x<pw;x++){if(pip((x+0.5)/pw,v,poly))roi[y*pw+x]=1;}}
+  return roi;
+}
+async function buildBG(t0,t1,pw,ph){
+  const cv=document.createElement('canvas');cv.width=pw;cv.height=ph;const cx=cv.getContext('2d',{willReadFrequently:true});
+  const K=Math.min(15,Math.max(7,Math.round((t1-t0)/4))),N=pw*ph,sm=[];
+  for(let k=0;k<K;k++){
+    if(AIS.cancel)return null;
+    await seekTo(t0+(t1-t0)*(k+0.5)/K);cx.drawImage(video,0,0,pw,ph);sm.push(cx.getImageData(0,0,pw,ph).data);
+    AIS.msg='建立球場背景 '+(k+1)+'/'+K;AIS.progress=0;renderAIProgress();
+  }
+  const bg=new Float32Array(N*3),tmp=new Uint8Array(K),mid=K>>1;
+  for(let i=0;i<N;i++)for(let c=0;c<3;c++){for(let k=0;k<K;k++)tmp[k]=sm[k][i*4+c];tmp.sort();bg[i*3+c]=tmp[mid];}
+  return bg;
+}
+function makeProcessor(pw,ph,roi,bg){
+  const N=pw*ph,heat=new Float32Array(N),fg=new Uint8Array(N),cmask=new Uint8Array(N),lab=new Int32Array(N),stack=new Int32Array(N);
+  const cv=document.createElement('canvas');cv.width=pw;cv.height=ph;const cx=cv.getContext('2d',{willReadFrequently:true});
+  const match=ballMatcher(),TH=48;
+  const aMaxB=Math.max(30,Math.round(N*0.0005)),pMin=Math.round(N*0.0006);
+  const frames=[];
+  function proc(t){
+    cx.drawImage(video,0,0,pw,ph);const d=cx.getImageData(0,0,pw,ph).data;
+    for(let i=0,j=0,k=0;i<N;i++,j+=4,k+=3){
+      if(!roi[i]){fg[i]=0;continue;}
+      const r=d[j],g=d[j+1],b=d[j+2];
+      const df=Math.abs(r-bg[k])+Math.abs(g-bg[k+1])+Math.abs(b-bg[k+2]);
+      const f=df>TH?1:0;fg[i]=f;const a=f?0.006:0.02;
+      bg[k]+=a*(r-bg[k]);bg[k+1]+=a*(g-bg[k+1]);bg[k+2]+=a*(b-bg[k+2]);
+    }
+    // 球：前景且符合球色的小區塊（即使球和球員重疊也找得到）
+    let cmN=0;
+    for(let i=0;i<N;i++){if(!fg[i]){cmask[i]=0;continue;}const j=i<<2;const m=match(d[j],d[j+1],d[j+2])?1:0;cmask[i]=m;cmN+=m;}
+    const balls=[];
+    if(cmN<N*0.02){
+      lab.fill(0);let cid=0;
+      for(let i=0;i<N;i++){
+        if(!cmask[i]||lab[i])continue;cid++;lab[i]=cid;let sp=0;stack[sp++]=i;
+        let area=0,sx=0,sy=0,minx=pw,miny=ph,maxx=0,maxy=0,hs=0;
+        while(sp>0){const p=stack[--sp],x=p%pw,y=(p-x)/pw;area++;sx+=x;sy+=y;hs+=heat[p];if(x<minx)minx=x;if(x>maxx)maxx=x;if(y<miny)miny=y;if(y>maxy)maxy=y;
+          if(x>0&&cmask[p-1]&&!lab[p-1]){lab[p-1]=cid;stack[sp++]=p-1;}
+          if(x<pw-1&&cmask[p+1]&&!lab[p+1]){lab[p+1]=cid;stack[sp++]=p+1;}
+          if(y>0&&cmask[p-pw]&&!lab[p-pw]){lab[p-pw]=cid;stack[sp++]=p-pw;}
+          if(y<ph-1&&cmask[p+pw]&&!lab[p+pw]){lab[p+pw]=cid;stack[sp++]=p+pw;}}
+        if(area>=2&&area<=aMaxB&&hs/area<2.6){const w=maxx-minx+1,h=maxy-miny+1,asp=w>h?w/h:h/w;if(asp<=4.5)balls.push([(sx/area+0.5)/pw,(sy/area+0.5)/ph,area,area/(w*h)]);}
+      }
+    }
+    for(let i=0;i<N;i++){const hv=heat[i]*0.8+cmask[i];heat[i]=hv;}
+    lab.fill(0);let id=0;const frags=[];
+    for(let i=0;i<N;i++){
+      if(!fg[i]||lab[i])continue;
+      id++;lab[i]=id;let sp=0;stack[sp++]=i;
+      let area=0,sx=0,sy=0,minx=pw,miny=ph,maxx=0,maxy=0;
+      while(sp>0){
+        const p=stack[--sp],x=p%pw,y=(p-x)/pw;area++;sx+=x;sy+=y;
+        if(x<minx)minx=x;if(x>maxx)maxx=x;if(y<miny)miny=y;if(y>maxy)maxy=y;
+        if(x>0){const q=p-1;if(fg[q]&&!lab[q]){lab[q]=id;stack[sp++]=q;}}
+        if(x<pw-1){const q=p+1;if(fg[q]&&!lab[q]){lab[q]=id;stack[sp++]=q;}}
+        if(y>0){const q=p-pw;if(fg[q]&&!lab[q]){lab[q]=id;stack[sp++]=q;}}
+        if(y<ph-1){const q=p+pw;if(fg[q]&&!lab[q]){lab[q]=id;stack[sp++]=q;}}
+      }
+      if(area>aMaxB)frags.push({minx,miny,maxx,maxy,area});
+    }
+    frags.sort((a,b)=>b.area-a.area);const fr=frags.slice(0,40);
+    const gx=Math.max(2,pw*0.012),gy=Math.max(2,ph*0.03);
+    let merged=true;
+    while(merged){merged=false;
+      outer:for(let i=0;i<fr.length;i++)for(let j=i+1;j<fr.length;j++){const a=fr[i],b=fr[j];
+        if(a.minx-gx<=b.maxx&&b.minx-gx<=a.maxx&&a.miny-gy<=b.maxy&&b.miny-gy<=a.maxy){
+          a.minx=Math.min(a.minx,b.minx);a.miny=Math.min(a.miny,b.miny);a.maxx=Math.max(a.maxx,b.maxx);a.maxy=Math.max(a.maxy,b.maxy);a.area+=b.area;fr.splice(j,1);merged=true;break outer;}}}
+    const P=fr.filter(b=>b.area>=pMin&&(b.maxy-b.miny+1)>=0.7*(b.maxx-b.minx+1)).sort((a,b)=>b.area-a.area).slice(0,6)
+      .map(b=>[((b.minx+b.maxx+1)/2)/pw,(b.maxy+1)/ph,b.minx/pw,b.miny/ph,(b.maxx+1)/pw,(b.maxy+1)/ph]);
+    balls.sort((a,b)=>b[3]*Math.sqrt(b[2])-a[3]*Math.sqrt(a[2]));
+    const B=balls.slice(0,4);
+    frames.push({t,P,B});AIS.live={P,B};
+  }
+  return{proc,frames};
+}
+function scan(t0,t1,proc,speed){
+  return new Promise(async resolve=>{
+    await seekTo(t0);let n=0;
+    const step=t=>{n++;AIS.progress=Math.min(1,(t-t0)/(t1-t0));if(n%5===0){renderAIProgress();drawOverlay();}};
+    if('requestVideoFrameCallback' in HTMLVideoElement.prototype){
+      let done=false;
+      const fin=()=>{if(done)return;done=true;video.pause();video.removeEventListener('ended',fin);document.removeEventListener('visibilitychange',vis);resolve();};
+      const vis=()=>{if(done)return;if(document.hidden)video.pause();else video.play().catch(()=>{});};
+      const cb=(now,meta)=>{if(done)return;const t=meta.mediaTime;if(AIS.cancel||t>=t1){fin();return;}try{proc(t);}catch(err){console.error(err);}step(t);video.requestVideoFrameCallback(cb);};
+      video.addEventListener('ended',fin);document.addEventListener('visibilitychange',vis);
+      video.playbackRate=speed;video.requestVideoFrameCallback(cb);video.play().catch(()=>fin());
+    }else{
+      for(let t=t0;t<t1&&!AIS.cancel;t+=1/12){await seekTo(t);proc(t);step(t);}
+      resolve();
+    }
+  });
+}
+function aiPost(frames){
+  const Hi=S.calib.Hi,toC=(x,y)=>applyH(Hi,x,y);
+  frames.sort((a,b)=>a.t-b.t);
+  if(!frames.length)return[];
+  // 1. 球的軌跡追蹤
+  const tracks=[];let active=[];
+  for(const f of frames){
+    const used=f.B.map(()=>false);
+    active=active.filter(tr=>f.t-tr.p[tr.p.length-1].t<=0.3);
+    active.sort((a,b)=>b.p.length-a.p.length);
+    for(const tr of active){
+      const n=tr.p.length,L=tr.p[n-1],dt=f.t-L.t;if(dt<=0)continue;
+      let px=L.x,py=L.y;if(n>=2){const Q=tr.p[n-2],d0=L.t-Q.t;if(d0>0){px+=(L.x-Q.x)/d0*dt;py+=(L.y-Q.y)/d0*dt;}}
+      const gate=(n<2?1.6:0.7)*dt+0.03;let bi=-1,bd=gate;
+      f.B.forEach((b,i)=>{if(used[i])return;const d=Math.hypot(b[0]-px,b[1]-py);if(d<bd){bd=d;bi=i;}});
+      if(bi>=0){used[bi]=true;tr.p.push({t:f.t,x:f.B[bi][0],y:f.B[bi][1]});}
+    }
+    f.B.forEach((b,i)=>{if(!used[i]){const tr={p:[{t:f.t,x:b[0],y:b[1]}]};tracks.push(tr);active.push(tr);}});
+  }
+  const good0=tracks.filter(tr=>{const p=tr.p,n=p.length;if(n<4||p[n-1].t-p[0].t<0.12)return false;let len=0;for(let i=1;i<n;i++)len+=Math.hypot(p[i].x-p[i-1].x,p[i].y-p[i-1].y);return len>0.05&&Math.hypot(p[n-1].x-p[0].x,p[n-1].y-p[0].y)>0.03;});
+  // 去掉「黏在球員身上」的假球（衣服、皮膚顏色接近球色）
+  const frameAt0=t=>{let lo=0,hi=frames.length-1;while(lo<hi){const m=(lo+hi)>>1;if(frames[m].t<t)lo=m+1;else hi=m;}return frames[lo];};
+  const inPlayer=q=>{const f=frameAt0(q.t);return f.P.some(p=>{const w=p[4]-p[2],h=p[5]-p[3];return q.x>=p[2]-0.1*w&&q.x<=p[4]+0.1*w&&q.y>=p[3]-0.05*h&&q.y<=p[5];});};
+  let good=good0.slice();
+  // 同時間有多條軌跡時，保留較長的那條
+  good.sort((a,b)=>b.p.length-a.p.length);
+  const kept=[];
+  for(const tr of good){const a0=tr.p[0].t,a1=tr.p[tr.p.length-1].t;let ov=0;for(const k of kept){const b0=k.p[0].t,b1=k.p[k.p.length-1].t;ov+=Math.max(0,Math.min(a1,b1)-Math.max(a0,b0));}if(ov<0.5*(a1-a0+0.01))kept.push(tr);}
+  good=kept;
+  const pts=[];good.forEach(tr=>tr.p.forEach(q=>pts.push(q)));pts.sort((a,b)=>a.t-b.t);
+  const ptsIn=(a,b)=>{let lo=0,hi=pts.length;while(lo<hi){const m=(lo+hi)>>1;if(pts[m].t<a)lo=m+1;else hi=m;}const o=[];for(let i=lo;i<pts.length&&pts[i].t<=b;i++)o.push(pts[i]);return o;};
+  const frameAt=t=>{let lo=0,hi=frames.length-1;while(lo<hi){const m=(lo+hi)>>1;if(frames[m].t<t)lo=m+1;else hi=m;}const a=frames[lo],b=frames[Math.max(0,lo-1)];return Math.abs(a.t-t)<=Math.abs(b.t-t)?a:b;};
+  const nearP=(t,x,y)=>{const f=frameAt(t);let best=null;for(const p of f.P){const w=p[4]-p[2],h=p[5]-p[3];if(x<p[2]-0.9*w||x>p[4]+0.9*w||y<p[3]-0.45*h||y>p[5]+0.05*h)continue;const sc=Math.hypot(x-p[0],y-(p[3]+p[5])/2)/Math.max(h,1e-3);if(!best||sc<best.sc)best={p,sc};}return best;};
+  // 2. 合併成單一路徑
+  const all=[];good.forEach(tr=>tr.p.forEach(q=>all.push({t:q.t,x:q.x,y:q.y,n:tr.p.length})));
+  all.sort((a,b)=>a.t-b.t);
+  const path=[];for(const q of all){const L=path[path.length-1];if(L&&q.t-L.t<0.012){if(q.n>L.n)path[path.length-1]=q;}else path.push(q);}
+  const H=S.calib.H,nl=applyH(H,0,22),nr=applyH(H,20,22),yFar=Math.min(applyH(H,0,44)[1],applyH(H,20,44)[1]);
+  const yNet=x=>nl[1]+(nr[1]-nl[1])*(x-nl[0])/((nr[0]-nl[0])||1e-6);
+  const M=0.012;
+  const aspect=video.videoWidth/video.videoHeight||16/9;
+  const expH=foot=>{const a=applyH(H,foot[0],foot[1]),b=applyH(H,foot[0]+1,foot[1]);return Math.hypot((b[0]-a[0])*aspect,b[1]-a[1])*5.6;};
+  const playerAt=(t,q,side)=>{const f=frameAt(t);let best=null;for(const p of f.P){const foot=toC(p[0],p[1]);if(!isFinite(foot[1])||((foot[1]<22)!==(side==='near')))continue;const w=p[4]-p[2],h=p[5]-p[3];
+      const dx=Math.max(0,p[2]-0.6*w-q.x,q.x-(p[4]+0.6*w)),dy=Math.max(0,p[3]-0.25*h-q.y,q.y-p[5]);const dist=Math.hypot(dx,dy)/Math.max(h,0.02);
+      const eh=expH(foot),okH=eh>0&&h<1.7*eh&&h>0.4*eh;
+      if(!best||dist<best.dist)best={p,foot:okH?foot:null,dist};}return best;};
+  // 3. 切回合：球的路徑中斷超過 2 秒
+  const segs=[];let cur=null;
+  for(const q of path){if(!cur||q.t-cur[cur.length-1].t>2.0){cur=[q];segs.push(cur);}else cur.push(q);}
+  const out=[];
+  for(const R of segs){
+    if(R.length<6)continue;
+    for(let i=0;i<R.length;i++){const a=R[Math.max(0,i-1)],b=R[Math.min(R.length-1,i+1)];R[i].ys=(a.y+R[i].y+b.y)/3;}
+    // 4. 球在畫面上越過網線（有容差帶），每次越網 = 一拍
+    const zone=q=>q.y>yNet(q.x)+M?'near':(q.y<yNet(q.x)-M?'far':null);
+    let sd=null,k0=0;while(k0<R.length&&!(sd=zone(R[k0])))k0++;
+    if(!sd)continue;
+    const cross=[];
+    for(let i=k0+1;i<R.length;i++){const z=zone(R[i]);if(!z||z===sd)continue;
+      let ok=true,j=i+1;while(j<R.length&&R[j].t-R[i].t<0.1){const zz=zone(R[j]);if(zz&&zz!==z){ok=false;break;}j++;}
+      if(ok){cross.push({t:(R[i-1].t+R[i].t)/2,to:z,i});sd=z;}}
+    if(!cross.length)continue;
+    // 某一邊的擊球點：近端取最後一個「最低點」(y 最大)，遠端取最後一個「最高點」(y 最小)
+    const lastExt=(seg,side)=>{
+      if(!seg.length)return null;
+      const isExt=i=>{const v=seg[i].ys;for(let k=Math.max(0,i-2);k<=Math.min(seg.length-1,i+2);k++){if(k===i)continue;if(side==='near'?seg[k].ys>v:seg[k].ys<v)return false;}return true;};
+      for(let i=seg.length-1;i>=0;i--)if(isExt(i)&&i<seg.length-1)return seg[i];
+      let e=seg[0];for(const q of seg)if(side==='near'?q.ys>e.ys:q.ys<e.ys)e=q;return e;};
+    const mk=(q,side,t)=>{const pl=q?playerAt(q.t,q,side):null;return{t:t!=null?t:q.t,q,side,pl:pl&&pl.dist<2.5?pl:null};};
+    const firstSide=cross[0].to==='near'?'far':'near';
+    const hits=[];
+    const pre=R.filter(q=>q.t<cross[0].t);
+    const e0=lastExt(pre,firstSide);hits.push(mk(e0||R[0],firstSide));
+    let netHit=false,lastSeg=null;
+    for(let k=0;k<cross.length;k++){
+      const a=cross[k].t,b=k+1<cross.length?cross[k+1].t:Infinity,side=cross[k].to,seg=R.filter(q=>q.t>a&&q.t<b);
+      if(k+1<cross.length){const e=lastExt(seg,side);hits.push(e?mk(e,side):{t:(a+b)/2,q:null,side,pl:null});}
+      else{
+        lastSeg=seg;
+        // 最後一次越網後：球是否又被打回網前（掛網）？
+        if(seg.length>=4){const e=lastExt(seg,side);const aft=seg.filter(q=>q.t>e.t);
+          if(aft.length>=3){const back=side==='near'?e.ys-Math.min(...aft.map(q=>q.ys)):Math.max(...aft.map(q=>q.ys))-e.ys;
+            const dur=aft[aft.length-1].t-e.t;const h=mk(e,side);if(back>0.05&&dur>0.25&&h.pl){hits.push(h);netHit=true;}}}
+      }
+    }
+    if(hits.length<2)continue;
+    const notes=[];
+    // 落地點：越網後、下一拍之前，球在畫面上的第一個「最低點」（y 局部最大）就是彈地
+    // 彈地點：球在畫面上往下的速度突然變小（或反轉）的那一點
+    const bounceIn=(seg,nextT)=>{let best=0,bi=-1;
+      for(let i=1;i<seg.length-1;i++){const p=seg[i];if(nextT!=null&&nextT-p.t<0.15)break;
+        const v1=(p.y-seg[i-1].y)/Math.max(0.02,p.t-seg[i-1].t),v2=(seg[i+1].y-p.y)/Math.max(0.02,seg[i+1].t-p.t);
+        if(v1>0&&v1-v2>best){best=v1-v2;bi=i;}}
+      if(bi<0||best<0.35)return null;const p=seg[bi],c=toC(p.x,p.y);
+      return isFinite(c[0])&&isFinite(c[1])?[Math.round(c[0]*10)/10,Math.round(c[1]*10)/10]:null;};
+    const shots=hits.map((h,k)=>{
+      const nx=hits[k+1],c=cross[k];
+      let land=null;
+      if(c){const seg=R.filter(q=>q.t>c.t&&q.t<(nx?nx.t:Infinity));land=bounceIn(seg,nx?nx.t:null);}
+      const foot=h.pl?h.pl.foot:null;
+      const dNet=foot?Math.abs(foot[1]-22):(k===2?15:7);
+      const dt=nx?nx.t-h.t:null;
+      const segAll=R.filter(q=>q.t>h.t&&q.t<(nx?nx.t:h.t+1.8));
+      let apex=1;for(const q of segAll)if(q.y<apex)apex=q.y;
+      const lobby=h.side==='near'?apex<yFar-0.05:(h.q?apex<h.q.y-0.12:false);
+      const high=h.pl&&h.q?h.q.y<h.pl.p[3]+0.1*(h.pl.p[5]-h.pl.p[3]):false;
+      let type;
+      if(k===0)type='serve';else if(k===1)type='return';
+      else if(lobby&&(dt==null||dt>=1.6))type='lob';
+      else if(high&&dt!=null&&dt<0.7)type='smash';
+      else if(dNet<=10)type=dt!=null?(dt>=0.95?'dink':'volley'):'volley';
+      else type=dt!=null?(dt>=1.15?'drop':'drive'):'drive';
+      return{t:Math.round(h.t*100)/100,type,player:null,land,ai:true,side:h.side,fy:foot?Math.round(foot[1]):null,dt:dt==null?null:Math.round(dt*100)/100};
+    });
+    // 5. 這一分的結果
+    const ls=shots[shots.length-1],lh=hits[hits.length-1];let outcome=null;
+    if(netHit){outcome='U';notes.push('最後一球看起來沒過網');shots[shots.length-1].land=null;}
+    else if(ls.land){outcome=inCourt(ls.land)?'W':'U';}
+    else{const e=lastSeg&&lastSeg[lastSeg.length-1];
+      if(e){const c=toC(e.x,e.y);const yb=applyH(H,Math.max(0,Math.min(20,c[0])),0)[1];
+        const outB=!isFinite(c[1])||e.y>yb+0.01||e.y>0.97||(lh.side==='near'&&(c[1]>46||c[0]<-2||c[0]>22));outcome=outB?'U':'W';notes.push('結果是依球的去向推測');}
+      else notes.push('無法判斷這一分的結果');}
+    if(hits.some(h=>!h.q))notes.push('有一拍沒追到球，時間是估計的');
+    if(hits.some(h=>h.q&&!h.pl))notes.push('有幾拍找不到擊球的球員');
+    const lastT=R[R.length-1].t;
+    out.push({id:uid(),start:Math.max(0,Math.round((hits[0].t-1.2)*100)/100),end:Math.round(Math.max(lh.t+1.2,lastT+0.4)*100)/100,shots,outcome,ai:true,ok:false,notes});
+  }
+  return out;
+}
+function applyAI(res,t0,t1){
+  const inRange=r=>r.start<t1&&(r.end||r.start)>t0;
+  S.rallies=S.rallies.filter(r=>!(r.ai&&!r.ok&&inRange(r)));
+  const keep=S.rallies.filter(inRange);
+  let added=0,shots=0;
+  for(const r of res){if(keep.some(m=>r.start<(m.end||m.start+1)&&r.end>m.start))continue;S.rallies.push(r);added++;shots+=r.shots.length;}
+  NEXT=replay();
+  for(const r of S.rallies){if(!r.ai||r.ok||!r.shots.length||!r.shots[0].side)continue;
+    r.notes=(r.notes||[]).filter(n=>n.indexOf('發球方')<0);
+    if(r.shots[0].side!==teamSide(r.serveTeam,r.game))r.notes.push('發球方和比分推算不一致，可能前面漏了回合或結果判斷錯誤');}
+  editId=null;selShot=null;focusId=null;
+  AIS.summary=added?'找到 '+added+' 個回合、'+shots+' 拍。請按「檢查 AI 結果」逐一確認，有錯直接改。':'沒有找到回合。請確認球場校正正確、球的顏色設定符合影片。';
+  commit();
+}
+async function runAI(){
+  if(AIS.running||ro()||needVideo())return;
+  if(!S.calib){toast('請先完成球場校正');startCalib();return;}
+  if(!video.videoWidth){toast('影片還沒載入完成');return;}
+  if(S.cur&&S.cur.shots.length){toast('請先結束目前正在標記的回合');return;}
+  S.cur=null;editId=null;selShot=null;calibPts=null;AIS.pick=false;
+  const dur=video.duration;let t0=0,t1=dur;
+  if(AIS.range!=='all'){t0=video.currentTime;t1=Math.min(dur,t0+(+AIS.range)*60);}
+  if(t1-t0<3){toast('分析範圍太短');return;}
+  AIS.running=true;AIS.cancel=false;AIS.progress=0;AIS.msg='準備中…';AIS.live=null;AIS.summary='';renderAll();
+  const wasMuted=video.muted,rate=video.playbackRate;video.pause();video.muted=true;
+  let res=null,err=null;
+  try{
+    const pw=640,ph=Math.max(90,Math.round(640*video.videoHeight/video.videoWidth));
+    const roi=buildROI(pw,ph);
+    const bg=await buildBG(t0,t1,pw,ph);
+    if(!bg)throw'cancel';
+    AIS.msg='偵測球員與球的位置';renderAIProgress();
+    const pr=makeProcessor(pw,ph,roi,bg);
+    await scan(t0,t1,pr.proc,+AIS.speed||2);
+    if(AIS.cancel)throw'cancel';
+    AIS.msg='分析擊球與回合…';AIS.progress=1;renderAIProgress();await new Promise(r=>setTimeout(r,30));
+    res=aiPost(pr.frames);AIS.frames=pr.frames.length;
+  }catch(e){err=e;}
+  AIS.running=false;AIS.live=null;video.pause();video.muted=wasMuted;video.playbackRate=rate;renderSpeeds();
+  if(err==='cancel'){toast('已取消 AI 分析');renderAll();return;}
+  if(err){console.error(err);toast('AI 分析發生錯誤：'+(err.message||err));renderAll();return;}
+  applyAI(res,t0,t1);toast(AIS.summary.split('。')[0]);
+}
+function renderAIProgress(){
+  const p=Math.round((AIS.progress||0)*100);
+  const f=$('#aiFill');if(f)f.style.width=p+'%';const f2=$('#aiFill2');if(f2)f2.style.width=p+'%';
+  const t=$('#aiText');if(t)t.textContent=(AIS.msg||'AI 分析中')+' · '+p+'%';
+  const m=$('#aiMsg');if(m)m.textContent=(AIS.msg||'分析中…')+' · '+p+'%';
+}
+function renderAI(){
+  const b=$('#aiBody');if(!b)return;
+  $('#aiBar').hidden=!AIS.running;
+  if(AIS.running){b.innerHTML='<p class="muted" id="aiMsg" style="margin:0 0 10px"></p><div class="prog"><span id="aiFill2"></span></div><p class="muted" style="font-size:12px;margin:8px 0">分析時請讓這個分頁保持在前景。</p><button class="btn small" data-ai="cancel">取消分析 <kbd>Esc</kbd></button>';renderAIProgress();return;}
+  if(readOnly){b.innerHTML='<p class="muted" style="margin:0">分享檢視無法執行 AI 分析。</p>';return;}
+  if(!video.src){b.innerHTML='<p class="muted" style="margin:0">選擇影片後，AI 會自動找出回合、每一拍的擊球、落點和得分結果，你再檢查修正就好。</p>';return;}
+  if(!S.calib){b.innerHTML='<p class="muted" style="margin:0 0 10px">第一步：依序點出球場四個角，讓 AI 知道球場在哪裡（只要做一次）。</p><button class="btn primary" data-ai="calib">開始球場校正</button>';return;}
+  const pend=S.rallies.filter(r=>r.ai&&!r.ok).length,c=aiCfg();
+  const sel=(id,opts,v)=>'<select id="'+id+'">'+opts.map(o=>'<option value="'+o[0]+'"'+(o[0]===v?' selected':'')+'>'+o[1]+'</option>').join('')+'</select>';
+  b.innerHTML=(AIS.summary?'<p style="margin:0 0 12px;color:#E4F79A;font-size:13px">'+esc(AIS.summary)+'</p>':'')+
+    '<div class="grid2"><label class="field">分析範圍'+sel('aiRange',[['all','整支影片'],['3','從目前位置起 3 分鐘'],['10','從目前位置起 10 分鐘']],AIS.range)+'</label>'+
+    '<label class="field">速度'+sel('aiSpeed',[['2','標準（較準）'],['4','快速']],AIS.speed)+'</label></div>'+
+    '<p class="muted" style="font-size:12px;margin:8px 0 10px">球的顏色：<span class="swatch" style="background:'+(c.ball==='custom'?(c.css||'#ccc'):BALLS[c.ball].css)+'"></span>'+esc(ballLabel())+'　第一局 '+esc(teamName('A'))+' 在'+(c.aNear?'近端':'遠端')+'　<a href="#setup">修改</a></p>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-ai="run">'+(S.rallies.some(r=>r.ai)?'重新 AI 分析':'開始 AI 分析')+'</button>'+(pend?'<button class="btn" data-ai="review">檢查 AI 結果（'+pend+'）</button>':'')+'</div>';
+}
+function startPick(){if(needVideo()||busy())return;video.pause();calibPts=null;AIS.pick=true;if(tab!=='analyze')switchTab('analyze');updateBanner();toast('點一下畫面中的球');}
+function pickColor(u,v){
+  const c=document.createElement('canvas');c.width=9;c.height=9;const x=c.getContext('2d',{willReadFrequently:true});
+  x.drawImage(video,u*video.videoWidth-4,v*video.videoHeight-4,9,9,0,0,9,9);const d=x.getImageData(0,0,9,9).data;
+  let best=null,avg=[0,0,0];
+  for(let i=0;i<d.length;i+=4){avg[0]+=d[i];avg[1]+=d[i+1];avg[2]+=d[i+2];const q=rgb2hsv(d[i],d[i+1],d[i+2]),s=q[1]*q[2];if(!best||s>best.s)best={s,q,rgb:[d[i],d[i+1],d[i+2]]};}
+  const cfg=aiCfg();AIS.pick=false;
+  if(best.q[1]<0.22){const a=avg.map(v=>v/81);const q=rgb2hsv(a[0],a[1],a[2]);if(q[2]>0.6){cfg.ball='white';commit();toast('已設定：白色球');return;}toast('取色失敗，請放大或暫停在球清楚的畫面再點一次');updateBanner();return;}
+  cfg.ball='custom';cfg.hue=Math.round(best.q[0]);cfg.css='rgb('+best.rgb.join(',')+')';commit();toast('已設定球的顏色（色相 '+cfg.hue+'°）');
+}
 
 /* ---------- 雲端（Supabase） ---------- */
 const SB_URL='https://qmdatzzemvymiigcmfns.supabase.co';
