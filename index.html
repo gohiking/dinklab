@@ -125,8 +125,15 @@ select.inline{min-height:36px;border-radius:8px;border:1px solid var(--line);bac
     <button role="tab" data-tab="report">報告</button>
     <button role="tab" data-tab="setup">設定</button>
   </nav>
-  <button class="btn" id="btnData">匯出 / 匯入</button>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn" id="btnCloud">雲端登入</button>
+    <button class="btn" id="btnData">匯出 / 匯入</button>
+  </div>
 </header>
+<div id="shareBar" hidden style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:10px 24px;background:#1A2318;border-bottom:1px solid rgba(215,242,92,.4);color:#E4F79A;font-size:13px">
+  <span id="shareText"></span>
+  <a href="./" id="shareExit" style="color:#E4F79A">離開分享檢視</a>
+</div>
 
 <main>
 <!-- 分析 -->
@@ -267,7 +274,14 @@ select.inline{min-height:36px;border-radius:8px;border:1px solid var(--line);bac
     </div>
   </div>
 </div>
+<div class="modal" id="cloudModal" hidden role="dialog" aria-modal="true" aria-labelledby="cTitle">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h2 id="cTitle" style="margin:0">雲端</h2><button class="btn small ghost" data-cact="close">關閉</button></div>
+    <div id="cloudBody"></div>
+  </div>
+</div>
 <div id="toast" role="status" aria-live="polite"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
 (function(){
@@ -298,7 +312,9 @@ let S=load(),NEXT=null,calibPts=null,stopAt=null,focusId=null,pendingDel=null,sh
 
 function defaults(){return{v:1,match:{teamA:'我方',teamB:'對手',players:['A1','A2','B1','B2'],mode:'doubles',firstServe:'A',videoName:''},calib:null,rallies:[],cur:null};}
 function load(){try{const j=JSON.parse(localStorage.getItem(KEY));if(j&&j.v===1&&Array.isArray(j.rallies))return j;}catch(e){}return defaults();}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+let readOnly=false;
+function save(){if(readOnly)return;try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+function ro(){if(readOnly){toast('分享檢視是唯讀的，無法修改標記');return true;}return false;}
 let toastT;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2400);}
 
 const isDoubles=()=>S.match.mode!=='singles';
@@ -425,27 +441,30 @@ function playRally(r){
 function needVideo(){if(!video.src){toast('請先選擇影片');return true;}return false;}
 function ensureCur(){if(!S.cur){S.cur={id:uid(),start:Math.max(0,video.currentTime-1),shots:[]};focusId=null;}}
 function addShot(type){
-  if(needVideo())return;ensureCur();
+  if(ro()||needVideo())return;ensureCur();
   S.cur.shots.push({t:video.currentTime,type,player:null,land:null});
   commit();
 }
 function setPlayer(n){
+  if(ro())return;
   const p=slots()[n-1];if(p==null)return;
   if(!S.cur||!S.cur.shots.length){toast('先標記一拍，再指定擊球者');return;}
   const s=S.cur.shots[S.cur.shots.length-1];s.player=s.player===p?null:p;commit();
 }
 function endRally(o){
+  if(ro())return;
   if(!S.cur||!S.cur.shots.length){toast('先標記至少一拍');return;}
   S.cur.outcome=o;S.cur.end=Math.max(video.currentTime+0.5,S.cur.start+0.5);
   const r=S.cur;S.rallies.push(r);S.cur=null;commit();
   toast(OUT[o]+' → '+teamName(r.winner)+' 贏得這一分');
 }
 function manualWin(t){
-  if(needVideo())return;ensureCur();
+  if(ro()||needVideo())return;ensureCur();
   S.cur.manualWinner=t;S.cur.outcome=null;S.cur.end=Math.max(video.currentTime+0.5,S.cur.start+0.5);
   S.rallies.push(S.cur);S.cur=null;commit();toast(teamName(t)+' 贏得這一分');
 }
 function undo(){
+  if(ro())return;
   if(S.cur){S.cur.shots.pop();if(!S.cur.shots.length)S.cur=null;}
   else if(S.rallies.length){
     let idx=S.rallies.length-1;
@@ -455,7 +474,7 @@ function undo(){
   }
   commit();
 }
-function deleteRally(id){S.rallies=S.rallies.filter(r=>r.id!==id);if(focusId===id)focusId=null;commit();toast('已刪除回合');}
+function deleteRally(id){if(ro())return;S.rallies=S.rallies.filter(r=>r.id!==id);if(focusId===id)focusId=null;commit();toast('已刪除回合');}
 
 /* ---------- 校正與點擊 ---------- */
 function startCalib(){
@@ -484,7 +503,7 @@ canvas.addEventListener('click',e=>{
 });
 
 /* ---------- 畫面渲染 ---------- */
-function commit(){NEXT=replay();save();renderAll();}
+function commit(){NEXT=replay();save();renderAll();scheduleCloud();}
 function renderAll(){
   $('#matchTitle').textContent=(S.match.teamA||'A')+' vs '+(S.match.teamB||'B')+(S.match.videoName?' · '+S.match.videoName:'');
   $('#lgA').textContent=teamName('A');$('#lgB').textContent=teamName('B');
@@ -633,6 +652,7 @@ function renderSetup(){
 [0,1,2,3].forEach(i=>$('#fP'+i).addEventListener('input',e=>{S.match.players[i]=e.target.value;commit();}));
 let resetArm=false;
 $('#btnReset').addEventListener('click',e=>{
+  if(ro())return;
   if(!resetArm){resetArm=true;e.target.textContent='再按一次確認清除';setTimeout(()=>{resetArm=false;e.target.textContent='清除全部標記';},3000);return;}
   resetArm=false;e.target.textContent='清除全部標記';S.rallies=[];S.cur=null;focusId=null;commit();toast('已清除全部標記');
 });
@@ -649,7 +669,12 @@ function csv(){
 async function download(name,text,type){
   try{if(window.claude&&window.claude.use){const dl=await window.claude.use('downloads');if(dl){await dl.save({filename:name,data:text});return;}}}catch(e){toast('下載已取消或被擋，可改用複製');return;}
   try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove();toast('已開始下載（若沒反應，請改用複製）');}catch(e){toast('下載被擋住了，請改用複製');}}
-async function copy(text){try{await navigator.clipboard.writeText(text);toast('已複製');}catch(e){const t=$('#mText');t.value=text;t.select();toast('請按 Ctrl/⌘+C 複製選取的內容');}}
+async function copy(text){
+  try{await navigator.clipboard.writeText(text);toast('已複製');return;}catch(e){}
+  try{const t=document.createElement('textarea');t.value=text;t.style.position='fixed';t.style.opacity='0';document.body.appendChild(t);t.select();const ok=document.execCommand('copy');t.remove();if(ok){toast('已複製');return;}}catch(e){}
+  if(!$('#cloudModal').hidden&&text.length<300){cloudMsg='請手動複製：'+text;renderCloud();}
+  else{const t=$('#mText');$('#modal').hidden=false;t.value=text;t.select();toast('請按 Ctrl/⌘+C 複製選取的內容');}
+}
 const baseName=()=>(S.match.teamA+'_vs_'+S.match.teamB).replace(/[^\w一-鿿-]+/g,'_');
 function openModal(){$('#mText').value=JSON.stringify(S,null,1);$('#modal').hidden=false;$('#mClose').focus();}
 function closeModal(){$('#modal').hidden=true;}
@@ -703,6 +728,7 @@ document.addEventListener('keydown',e=>{
   if(e.target.closest&&e.target.closest('input,textarea,select'))return;
   if(e.metaKey||e.ctrlKey||e.altKey)return;
   if(!$('#modal').hidden){if(e.key==='Escape')closeModal();return;}
+  if(!$('#cloudModal').hidden){if(e.key==='Escape')closeCloud();return;}
   if(tab!=='analyze')return;
   const k=e.key.length===1?e.key.toLowerCase():e.key;
   if(k===' '){e.preventDefault();togglePlay();return;}
@@ -718,10 +744,151 @@ document.addEventListener('keydown',e=>{
 if(window.ResizeObserver)new ResizeObserver(()=>drawOverlay()).observe($('#stage'));
 window.addEventListener('resize',drawOverlay);
 
+/* ---------- 雲端（Supabase） ---------- */
+const SB_URL='https://qmdatzzemvymiigcmfns.supabase.co';
+const SB_KEY='sb_publishable_sJNNXmTAVNSr3rkuZH0owA_0BtmzWS0';
+let sb=null,user=null,cloudList=null,cloudMsg='',cloudStatus='',cloudTimer=null,cloudArm=null,cloudBusy=false;
+function netHint(err){
+  const m=(err&&err.message)||String(err||'');
+  if(/fetch|network|Load failed|NetworkError/i.test(m))return '連不到雲端。在 Claude 的預覽頁面裡雲端連線會被擋住，請用你自己的網址（例如 GitHub Pages）開啟。';
+  if(/relation .* does not exist|schema cache|Could not find the (table|function)/i.test(m))return '資料表還沒建立：請到 Supabase 的 SQL Editor 執行 supabase_setup.sql。';
+  if(/Email not confirmed/i.test(m))return '這個 Email 還沒確認，請先到信箱點確認連結。';
+  if(/Invalid login credentials/i.test(m))return 'Email 或密碼不正確。';
+  if(/User already registered/i.test(m))return '這個 Email 已經註冊過了，請直接登入。';
+  if(/Password should be/i.test(m))return '密碼至少需要 6 個字元。';
+  if(/rate limit/i.test(m))return '寄信次數太頻繁，請稍後再試。';
+  return m;
+}
+function initCloud(){
+  try{if(window.supabase&&window.supabase.createClient)sb=window.supabase.createClient(SB_URL,SB_KEY);}catch(e){sb=null;}
+  renderCloudBtn();
+  if(!sb)return;
+  sb.auth.onAuthStateChange((_e,session)=>{const was=user&&user.id;user=session?session.user:null;renderCloudBtn();
+    if((user&&user.id)!==was){cloudList=null;if(!$('#cloudModal').hidden){renderCloud();if(user)loadList();}}});
+}
+function renderCloudBtn(){$('#btnCloud').textContent=readOnly?'雲端':(user?'雲端 · '+(cloudStatus||'已登入'):'雲端登入');}
+function setStatus(t){cloudStatus=t;renderCloudBtn();if(!$('#cloudModal').hidden)renderCloud();}
+function openCloud(){$('#cloudModal').hidden=false;cloudMsg='';renderCloud();if(user&&!cloudList)loadList();}
+function closeCloud(){$('#cloudModal').hidden=true;cloudArm=null;}
+function matchTitle(){return (S.match.teamA||'A')+' vs '+(S.match.teamB||'B')+(S.match.videoName?' · '+S.match.videoName:'');}
+function shareLink(token){return location.origin+location.pathname+'?share='+token;}
+function renderCloud(){
+  const el=$('#cloudBody');const msg=cloudMsg?'<p style="margin:12px 0 0;color:#FFC48C;font-size:13px">'+esc(cloudMsg)+'</p>':'';
+  if(!sb){el.innerHTML='<p class="muted">雲端元件沒有載入（可能是網路問題或被瀏覽器擋住）。本機標記仍然可以正常使用。</p>';return;}
+  if(readOnly){el.innerHTML='<p class="muted">你正在檢視別人分享的比賽（唯讀）。要使用自己的雲端，請先離開分享檢視。</p>';return;}
+  if(!user){
+    el.innerHTML='<form id="authForm" style="display:flex;flex-direction:column;gap:12px">'+
+      '<p class="muted" style="margin:0;font-size:13px">登入後，比賽標記會存到雲端，換電腦也能繼續，還能產生唯讀連結分享給教練。影片本身不會上傳。</p>'+
+      '<label class="field">Email<input type="email" id="aEmail" autocomplete="email" required></label>'+
+      '<label class="field">密碼（至少 6 個字元）<input type="password" id="aPass" autocomplete="current-password" minlength="6" required></label>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" type="submit" data-cact="signin"'+(cloudBusy?' disabled':'')+'>登入</button><button class="btn" type="button" data-cact="signup"'+(cloudBusy?' disabled':'')+'>註冊新帳號</button></div>'+msg+'</form>';
+    return;
+  }
+  const cur=S.cloudId;
+  let list='<p class="muted">載入中…</p>';
+  if(cloudList){
+    list=cloudList.length?'<ul class="rlist" style="max-height:none">'+cloudList.map(m=>{
+      const isCur=m.id===cur;
+      return '<li style="flex-wrap:wrap"><div class="info"><b>'+esc(m.title||'未命名')+'</b>'+(isCur?' <span style="color:#E4F79A;font-size:12px">· 目前開啟</span>':'')+
+        '<small>更新於 '+new Date(m.updated_at).toLocaleString('zh-TW')+(m.is_shared?' · 已開啟分享':'')+'</small></div>'+
+        (isCur?'':'<button class="btn small" data-cact="open" data-id="'+m.id+'">'+(cloudArm==='open:'+m.id?'確定開啟？':'開啟')+'</button>')+
+        '<button class="btn small" data-cact="share" data-id="'+m.id+'" aria-pressed="'+m.is_shared+'">'+(m.is_shared?'分享中':'分享')+'</button>'+
+        (m.is_shared?'<button class="btn small" data-cact="copylink" data-token="'+m.share_token+'">複製連結</button>':'')+
+        '<button class="btn small ghost danger" data-cact="del" data-id="'+m.id+'">'+(cloudArm==='del:'+m.id?'確定刪除？':'刪除')+'</button></li>';}).join('')+'</ul>'
+      :'<p class="muted">雲端還沒有比賽。按上面的「存到雲端」就會建立第一筆。</p>';
+  }
+  el.innerHTML='<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center"><span class="muted">'+esc(user.email)+'</span><button class="btn small ghost" data-cact="signout">登出</button></div>'+
+    '<div class="card" style="background:var(--panel2);margin-top:12px"><b>目前這場：</b>'+esc(matchTitle())+'<div class="muted" style="font-size:13px;margin:4px 0 10px">'+(cur?'已連結雲端，之後的修改會自動同步。'+(cloudStatus?'（'+esc(cloudStatus)+'）':''):'尚未存到雲端。')+'</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-cact="save">'+(cur?'立即同步':'存到雲端')+'</button><button class="btn" data-cact="new">'+(cloudArm==='new'?'確定開新比賽？（目前資料會清空）':'開新比賽')+'</button></div></div>'+
+    '<h3>我的比賽</h3>'+list+msg+
+    '<p class="muted" style="font-size:12px;margin-top:12px">分享連結是唯讀的：教練打開就能看報告；只要在他的電腦上選同一支影片，就能逐回合回放。</p>';
+}
+async function loadList(){
+  if(!sb||!user)return;
+  const{data,error}=await sb.from('matches').select('id,title,updated_at,is_shared,share_token').order('updated_at',{ascending:false});
+  if(error){cloudMsg=netHint(error);cloudList=[];}else cloudList=data;
+  if(!$('#cloudModal').hidden)renderCloud();
+}
+function scheduleCloud(){if(!sb||!user||readOnly||!S.cloudId)return;clearTimeout(cloudTimer);cloudTimer=setTimeout(()=>cloudSave(true),2500);}
+async function cloudSave(silent){
+  if(!sb||!user||readOnly)return;
+  clearTimeout(cloudTimer);setStatus('同步中…');
+  const payload={title:matchTitle(),data:S,updated_at:new Date().toISOString()};
+  let res=null;
+  if(S.cloudId)res=await sb.from('matches').update(payload).eq('id',S.cloudId).select('id').maybeSingle();
+  if(!S.cloudId||(res&&!res.error&&!res.data)){S.cloudId=null;res=await sb.from('matches').insert(payload).select('id').single();if(!res.error){S.cloudId=res.data.id;payload.data=S;await sb.from('matches').update({data:S}).eq('id',S.cloudId);}}
+  if(res.error){setStatus('同步失敗');cloudMsg=netHint(res.error);if(!silent)toast('雲端儲存失敗');if(!$('#cloudModal').hidden)renderCloud();return;}
+  save();setStatus('已同步 '+new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}));
+  if(!silent){toast('已存到雲端');loadList();}
+}
+async function cloudOpen(id){
+  const{data,error}=await sb.from('matches').select('id,data').eq('id',id).single();
+  if(error){cloudMsg=netHint(error);renderCloud();return;}
+  S=Object.assign(defaults(),data.data);S.cloudId=data.id;focusId=null;calibPts=null;commit();closeCloud();toast('已開啟雲端比賽；請選擇對應的影片');
+}
+async function cloudShare(id){
+  const m=cloudList.find(x=>x.id===id);if(!m)return;
+  const{error}=await sb.from('matches').update({is_shared:!m.is_shared}).eq('id',id);
+  if(error){cloudMsg=netHint(error);renderCloud();return;}
+  m.is_shared=!m.is_shared;renderCloud();
+  if(m.is_shared)copy(shareLink(m.share_token));
+}
+async function cloudDelete(id){
+  const{error}=await sb.from('matches').delete().eq('id',id);
+  if(error){cloudMsg=netHint(error);renderCloud();return;}
+  if(S.cloudId===id){S.cloudId=null;save();}
+  toast('已從雲端刪除');loadList();
+}
+$('#cloudModal').addEventListener('click',async e=>{
+  if(e.target.id==='cloudModal'){closeCloud();return;}
+  const b=e.target.closest('[data-cact]');if(!b)return;
+  const a=b.dataset.cact,id=b.dataset.id;cloudMsg='';
+  if(a==='close'){closeCloud();return;}
+  if(a==='signup'){
+    const email=$('#aEmail').value.trim(),pass=$('#aPass').value;
+    if(!email||pass.length<6){cloudMsg='請輸入 Email 和至少 6 個字元的密碼';renderCloud();return;}
+    cloudBusy=true;renderCloud();$('#aEmail').value=email;
+    try{const{data,error}=await sb.auth.signUp({email,password:pass,options:{emailRedirectTo:location.origin+location.pathname}});
+      cloudBusy=false;
+      if(error)cloudMsg=netHint(error);else if(!data.session)cloudMsg='已寄出確認信到 '+email+'，點信裡的連結後回到這裡登入。';
+    }catch(err){cloudBusy=false;cloudMsg=netHint(err);}
+    if(!user)renderCloud();return;
+  }
+  if(a==='signout'){await sb.auth.signOut();S.cloudId=null;save();cloudStatus='';renderCloudBtn();renderCloud();return;}
+  if(a==='save'){cloudSave(false);return;}
+  if(a==='new'){if(cloudArm!=='new'){cloudArm='new';renderCloud();return;}cloudArm=null;const m=S.match;S=defaults();S.match.mode=m.mode;focusId=null;commit();closeCloud();toast('已開新比賽');return;}
+  if(a==='open'){const k='open:'+id;if((S.rallies.length||S.cur)&&!S.cloudId&&cloudArm!==k){cloudArm=k;cloudMsg='目前這場還沒存到雲端，開啟後會被取代。再按一次確認。';renderCloud();return;}cloudArm=null;cloudOpen(id);return;}
+  if(a==='share'){cloudShare(id);return;}
+  if(a==='copylink'){copy(shareLink(b.dataset.token));return;}
+  if(a==='del'){const k='del:'+id;if(cloudArm!==k){cloudArm=k;renderCloud();return;}cloudArm=null;cloudDelete(id);return;}
+});
+$('#cloudModal').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const email=$('#aEmail').value.trim(),pass=$('#aPass').value;
+  cloudBusy=true;cloudMsg='';renderCloud();$('#aEmail').value=email;
+  try{const{error}=await sb.auth.signInWithPassword({email,password:pass});cloudBusy=false;
+    if(error){cloudMsg=netHint(error);renderCloud();}
+    else{toast('登入成功');renderCloud();loadList();}
+  }catch(err){cloudBusy=false;cloudMsg=netHint(err);renderCloud();}
+});
+$('#btnCloud').addEventListener('click',openCloud);
+async function openShared(token){
+  if(!sb){toast('雲端元件沒有載入，無法開啟分享');return;}
+  const{data,error}=await sb.rpc('get_shared_match',{token});
+  if(error||!data||!data.length){$('#shareBar').hidden=false;$('#shareText').textContent=error?netHint(error):'這個分享連結無效，或擁有者已關閉分享。';return;}
+  readOnly=true;S=Object.assign(defaults(),data[0].data);S.cloudId=null;focusId=null;
+  $('#shareBar').hidden=false;
+  $('#shareText').textContent='唯讀檢視：'+(data[0].title||'分享的比賽')+'（更新於 '+new Date(data[0].updated_at).toLocaleString('zh-TW')+'）· 選擇同一支影片即可逐回合回放';
+  commit();renderCloudBtn();switchTab('report');
+}
+
 /* ---------- 啟動 ---------- */
 if(S.match.videoName&&(S.rallies.length||S.cur)){const lv=$('#lastVideo');lv.hidden=false;lv.textContent='上次的影片：'+S.match.videoName+'（標記已保存，請重新選擇同一支影片繼續）';}
 renderSpeeds();commit();
 const h0=location.hash.slice(1);switchTab(['analyze','report','setup'].includes(h0)?h0:'analyze');
+initCloud();
+let shareToken=null;try{shareToken=new URLSearchParams(location.search).get('share');}catch(e){}
+if(shareToken&&/^[0-9a-f-]{36}$/i.test(shareToken))openShared(shareToken);
 })();
 </script>
 </body>
