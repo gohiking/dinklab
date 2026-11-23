@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DinkLab 匹克球影片分析</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap">
+<style>
+:root{--bg:#0E1316;--top:#12181B;--panel:#161D21;--panel2:#1D262B;--line:#2A353B;--text:#EAF0F2;--muted:#9DAAB1;--lime:#D7F25C;--blue:#5AB0FF;--orange:#FF9F43;--num:'Space Grotesk','Noto Sans TC',sans-serif}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:'Noto Sans TC',system-ui,sans-serif;font-size:14px}
+button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--lime)}
+.num{font-family:var(--num)}
+.muted{color:var(--muted)}
+[hidden]{display:none!important}
+header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:12px 24px;border-bottom:1px solid var(--line);background:var(--top);position:sticky;top:0;z-index:5}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand b{font-family:var(--num);font-size:18px;letter-spacing:.02em}
+.brand .match{color:var(--muted);padding-left:12px;border-left:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tabs{display:flex;gap:4px}
+.tabs button{border:none;background:transparent;color:var(--muted);padding:10px 16px;border-radius:8px;min-height:40px}
+.tabs button[aria-selected="true"]{background:var(--panel2);color:var(--text);font-weight:500}
+.btn{min-height:40px;padding:0 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--text)}
+.btn:hover{border-color:#3A474E}
+.btn.primary{background:var(--lime);border-color:var(--lime);color:var(--bg);font-weight:700}
+.btn.small{min-height:32px;padding:0 10px;font-size:13px;border-radius:8px}
+.btn.ghost{background:transparent;color:var(--muted)}
+.btn.danger{color:var(--orange)}
+.btn[aria-pressed="true"]{background:rgba(215,242,92,.12);border-color:rgba(215,242,92,.5);color:#E4F79A}
+main{padding:20px 24px 32px}
+.layout{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}
+.left{flex:999 1 600px;min-width:0;display:flex;flex-direction:column;gap:14px}
+.right{flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.card h2{margin:0 0 12px;font-size:15px}
+.card h3{margin:14px 0 8px;font-size:13px;color:var(--muted);font-weight:500}
+.drop{border:2px dashed #3A474E;border-radius:14px;padding:56px 24px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px;background:var(--panel)}
+.drop.over{border-color:var(--lime);background:#1A2318}
+.drop h2{margin:0;font-size:20px}
+.filebtn{display:inline-flex;align-items:center;min-height:44px;padding:0 18px;border-radius:10px;background:var(--lime);color:var(--bg);font-weight:700;cursor:pointer}
+.filebtn input{position:absolute;width:1px;height:1px;opacity:0}
+.stage{position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+.stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:fill}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;cursor:crosshair}
+.hud{position:absolute;top:12px;left:12px;display:flex;gap:8px;pointer-events:none;flex-wrap:wrap}
+.hud span{padding:5px 12px;border-radius:999px;background:rgba(14,19,22,.85);font-size:13px}
+.banner{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);padding:10px 16px;border-radius:10px;background:rgba(14,19,22,.92);border:1px solid var(--lime);color:#E4F79A;pointer-events:none;white-space:nowrap}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.iconbtn{width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--panel);display:flex;align-items:center;justify-content:center}
+.iconbtn.play{border-radius:999px;background:var(--lime);border-color:var(--lime)}
+.seg{display:flex;gap:2px;padding:3px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.seg button{min-width:44px;min-height:36px;border:none;border-radius:7px;background:transparent;color:var(--muted);font-family:var(--num);font-size:13px}
+.seg button[aria-pressed="true"]{background:#2E3B42;color:var(--text)}
+.timeline{position:relative;height:40px;background:var(--panel2);border-radius:8px;cursor:pointer;overflow:hidden}
+.timeline .blk{position:absolute;top:6px;bottom:6px;border-radius:4px;border:none;padding:0;min-width:4px;opacity:.75}
+.timeline .blk:hover,.timeline .blk.focus{opacity:1;outline:2px solid var(--text)}
+.timeline .blk.A{background:var(--lime)}.timeline .blk.B{background:var(--blue)}.timeline .blk.N{background:#5d6a71}
+.timeline .cur{position:absolute;top:6px;bottom:6px;border-radius:4px;background:repeating-linear-gradient(45deg,#D7F25C55 0 6px,transparent 6px 12px);border:1px dashed var(--lime)}
+#playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--text);pointer-events:none}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.score{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.score .big{font-family:var(--num);font-size:40px;font-weight:700;line-height:1}
+.chips{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px;min-height:34px}
+.chip{display:flex;gap:6px;align-items:center;padding:6px 10px;border-radius:8px;font-size:13px}
+.chip.A{background:rgba(215,242,92,.12);color:#E4F79A;border:1px solid rgba(215,242,92,.4)}
+.chip.B{background:rgba(90,176,255,.12);color:#A9D4FF;border:1px solid rgba(90,176,255,.4)}
+.chip .n{font-family:var(--num);opacity:.7}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.keybtn{display:flex;justify-content:space-between;align-items:center;gap:6px;min-height:44px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--text);text-align:left}
+.keybtn:hover{border-color:#4A5860}
+.keybtn.on{background:rgba(215,242,92,.14);border-color:var(--lime)}
+.keybtn.pB.on{background:rgba(90,176,255,.14);border-color:var(--blue)}
+kbd{font-family:var(--num);font-size:11px;color:var(--muted);border:1px solid #3A474E;border-radius:4px;padding:1px 6px;white-space:nowrap}
+.rlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:320px;overflow:auto}
+.rlist li{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:var(--panel2)}
+.dot{width:10px;height:10px;border-radius:999px;flex:none}
+.dot.A{background:var(--lime)}.dot.B{background:var(--blue)}.dot.N{background:#5d6a71}
+.rlist .info{flex:1;min-width:0;font-size:13px}
+.rlist .info small{display:block;color:var(--muted);font-size:12px}
+.help{font-size:13px;color:var(--muted);line-height:1.9}
+.help summary{cursor:pointer;color:var(--text);font-weight:500;min-height:32px}
+.help kbd{margin-right:4px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.kpi .v{font-family:var(--num);font-size:32px;font-weight:700;margin-top:6px}
+.kpi .l{font-size:13px;color:var(--muted)}
+.kpi .s{font-size:12px;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:20px}
+.row>.card{flex:1 1 420px;min-width:0}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:10px 8px;border-bottom:1px solid #222C31;white-space:nowrap}
+th{color:var(--muted);font-weight:500;border-bottom-color:var(--line)}
+td.n{font-family:var(--num)}
+.bar{display:grid;grid-template-columns:76px minmax(0,1fr) 64px;gap:10px;align-items:center;margin-bottom:8px;font-size:13px}
+.bar .track{display:flex;flex-direction:column;gap:3px}
+.bar .track span{height:8px;border-radius:999px;min-width:2px}
+.bar .a{background:var(--lime)}.bar .b{background:var(--blue)}
+.empty{padding:48px 24px;text-align:center;color:var(--muted)}
+.form{max-width:760px;display:flex;flex-direction:column;gap:16px}
+.field{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
+.field input,.field select,textarea{min-height:44px;padding:0 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text)}
+textarea{padding:10px 12px;width:100%;min-height:220px;font-family:ui-monospace,monospace;font-size:12px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;z-index:20}
+.modal .card{width:min(720px,100%);max-height:90vh;overflow:auto}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#24302F;border:1px solid var(--lime);color:var(--text);padding:10px 16px;border-radius:10px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:30;max-width:90vw}
+#toast.show{opacity:1}
+select.inline{min-height:36px;border-radius:8px;border:1px solid var(--line);background:var(--bg);padding:0 8px}
+@media (max-width:640px){main{padding:14px}header.top{padding:10px 14px}.brand .match{display:none}.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="12" fill="#D7F25C"/><g fill="#0E1316"><circle cx="10" cy="10" r="1.8"/><circle cx="17" cy="9" r="1.8"/><circle cx="9" cy="17" r="1.8"/><circle cx="16" cy="16" r="1.8"/><circle cx="20" cy="15" r="1.8"/></g></svg>
+    <b>DinkLab</b>
+    <span class="match" id="matchTitle"></span>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="主選單">
+    <button role="tab" data-tab="analyze">分析</button>
+    <button role="tab" data-tab="report">報告</button>
+    <button role="tab" data-tab="setup">設定</button>
+  </nav>
+  <button class="btn" id="btnData">匯出 / 匯入</button>
+</header>
+
+<main>
+<!-- 分析 -->
+<section id="view-analyze">
+  <div class="layout">
+    <div class="left">
+      <div class="drop" id="drop">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#D7F25C" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4-2.5z"/></svg>
+        <h2>選擇比賽影片</h2>
+        <p class="muted" style="margin:0">拖曳影片到這裡，或按下方按鈕。影片只在你的瀏覽器裡播放，不會上傳。</p>
+        <p class="muted" id="lastVideo" style="margin:0" hidden></p>
+        <label class="filebtn">選擇影片<input type="file" accept="video/*" id="fileInput"></label>
+        <p class="muted" style="margin:0;font-size:12px">建議從底線後方高處固定拍攝，整個球場入鏡；MP4 (H.264) 相容性最好。</p>
+      </div>
+
+      <div id="stageWrap" hidden style="display:flex;flex-direction:column;gap:14px">
+        <div class="stage" id="stage">
+          <video id="video" playsinline preload="auto"></video>
+          <canvas id="overlay" aria-label="影片畫面：點擊可記錄落點或校正球場"></canvas>
+          <div class="hud"><span class="num" id="hudScore"></span><span id="hudRally" style="color:#E4F79A"></span></div>
+          <div class="banner" id="banner" hidden></div>
+        </div>
+        <div class="controls">
+          <button class="iconbtn play" id="btnPlay" aria-label="播放 / 暫停（空白鍵）"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path id="playIcon" d="M5 3 L15 9 L5 15 Z" fill="#0E1316"/></svg></button>
+          <button class="iconbtn" id="btnBack" aria-label="倒退 5 秒"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#EAF0F2" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 4 L3 9 L8 14 M15 4 L10 9 L15 14"/></svg></button>
+          <button class="iconbtn" id="btnFwd" aria-label="前進 5 秒"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#EAF0F2" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 4 L15 9 L10 14 M3 4 L8 9 L3 14"/></svg></button>
+          <span class="num muted" id="timeLabel">0:00.0 / 0:00</span>
+          <div class="seg" id="speeds" role="group" aria-label="播放速度" style="margin-left:auto"></div>
+          <button class="btn" id="btnLines" aria-pressed="true">球場線</button>
+          <button class="btn" id="btnCalib">球場校正 <kbd>C</kbd></button>
+          <label class="btn" style="display:inline-flex;align-items:center;cursor:pointer">換影片<input type="file" accept="video/*" id="fileInput2" style="position:absolute;width:1px;height:1px;opacity:0"></label>
+        </div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+            <h2 style="margin:0">回合時間軸 <span class="muted" style="font-weight:400" id="tlInfo"></span></h2>
+            <div class="legend"><span><i style="background:var(--lime)"></i><span id="lgA">A</span> 得分</span><span><i style="background:var(--blue)"></i><span id="lgB">B</span> 得分</span></div>
+          </div>
+          <div class="timeline" id="timeline"><div id="playhead"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="right">
+      <div class="card">
+        <div class="score"><span class="big" id="bigScore">0 – 0 – 2</span><span class="muted" id="serveInfo"></span></div>
+        <div class="muted" style="margin-top:8px;font-size:13px" id="gamesInfo"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <h2 style="margin:0" id="curTitle">目前回合</h2>
+          <button class="btn small ghost" id="btnUndo">復原 <kbd>⌫</kbd></button>
+        </div>
+        <ol class="chips" id="chips"></ol>
+        <p class="muted" id="curHint" style="margin:8px 0 0;font-size:12px"></p>
+        <h3>標記擊球</h3>
+        <div class="grid2" id="shotBtns"></div>
+        <h3>擊球者（套用到最後一拍）</h3>
+        <div class="grid4" id="playerBtns"></div>
+        <h3>回合結果（以最後一拍的擊球者判定）</h3>
+        <div class="grid3" id="outBtns"></div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button class="btn small" id="winA">直接判 A 得分</button>
+          <button class="btn small" id="winB">直接判 B 得分</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>回合列表 <span class="muted num" style="font-weight:400" id="rCount"></span></h2>
+        <ul class="rlist" id="rallyList"></ul>
+      </div>
+
+      <div class="card">
+        <details class="help">
+          <summary>快捷鍵與使用方式</summary>
+          <div><kbd>空白</kbd>播放／暫停　<kbd>←</kbd><kbd>→</kbd>逐格　<kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd>跳 5 秒　<kbd>[</kbd><kbd>]</kbd>調速</div>
+          <div>擊球：<kbd>S</kbd>發球 <kbd>R</kbd>接發 <kbd>D</kbd>放小球 <kbd>V</kbd>抽球 <kbd>K</kbd>Dink <kbd>Y</kbd>截擊 <kbd>L</kbd>高吊 <kbd>X</kbd>殺球 <kbd>E</kbd>Erne <kbd>A</kbd>ATP <kbd>O</kbd>其他</div>
+          <div>擊球者：<kbd>1</kbd>–<kbd>4</kbd>　結果：<kbd>W</kbd>致勝 <kbd>U</kbd>非受迫失誤 <kbd>F</kbd>受迫失誤　<kbd>⌫</kbd>復原　<kbd>C</kbd>校正</div>
+          <div style="margin-top:6px">流程：在擊球瞬間暫停或慢放，按擊球鍵；完成球場校正後，按完擊球鍵再點一下畫面上的落點；回合結束時按 W / U / F，系統會自動記分（雙打 side-out，0-0-2 開局）。</div>
+        </details>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- 報告 -->
+<section id="view-report" hidden><div id="report" style="max-width:1384px;margin:0 auto;display:flex;flex-direction:column;gap:20px"></div></section>
+
+<!-- 設定 -->
+<section id="view-setup" hidden>
+  <div class="form" style="margin:0 auto">
+    <div class="card">
+      <h2>比賽資訊</h2>
+      <div class="grid2">
+        <label class="field">A 隊名稱（通常是你方）<input id="fTeamA"></label>
+        <label class="field">B 隊名稱<input id="fTeamB"></label>
+      </div>
+      <div class="grid2" style="margin-top:12px">
+        <label class="field">比賽類型
+          <select id="fMode"><option value="doubles">雙打</option><option value="singles">單打</option></select></label>
+        <label class="field">第一局先發球
+          <select id="fFirst"><option value="A">A 隊</option><option value="B">B 隊</option></select></label>
+      </div>
+      <h3>球員名稱</h3>
+      <div class="grid4">
+        <label class="field">A1<input id="fP0"></label>
+        <label class="field" id="fP1w">A2<input id="fP1"></label>
+        <label class="field">B1<input id="fP2"></label>
+        <label class="field" id="fP3w">B2<input id="fP3"></label>
+      </div>
+    </div>
+    <div class="card">
+      <h2>球場校正</h2>
+      <p class="muted" id="calibStatus" style="margin:0 0 12px"></p>
+      <button class="btn" id="btnCalib2">前往校正</button>
+    </div>
+    <div class="card">
+      <h2>資料</h2>
+      <p class="muted" style="margin:0 0 12px">標記資料會自動存在這個瀏覽器。換電腦前請先用「匯出 / 匯入」備份。</p>
+      <button class="btn danger" id="btnReset">清除全部標記</button>
+    </div>
+  </div>
+</section>
+</main>
+
+<div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="mTitle">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center"><h2 id="mTitle" style="margin:0">匯出 / 匯入</h2><button class="btn small ghost" id="mClose">關閉</button></div>
+    <p class="muted" style="font-size:13px">下面是這場比賽的全部標記資料（JSON）。可以複製保存，或貼上別的 JSON 後按「匯入」。如果下載沒有反應，請改用複製。</p>
+    <textarea id="mText" aria-label="JSON 資料"></textarea>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      <button class="btn primary" id="mCopy">複製 JSON</button>
+      <button class="btn" id="mDlJson">下載 JSON</button>
+      <button class="btn" id="mDlCsv">下載 CSV</button>
+      <button class="btn" id="mCopyCsv">複製 CSV</button>
+      <label class="btn" style="display:inline-flex;align-items:center;cursor:pointer">從檔案匯入<input type="file" accept=".json,application/json" id="mFile" style="position:absolute;width:1px;height:1px;opacity:0"></label>
+      <button class="btn" id="mImport" style="margin-left:auto">匯入上方內容</button>
+    </div>
+  </div>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+'use strict';
+const $=s=>document.querySelector(s);
+const KEY='dinklab.v1';
+const SHOTS=[
+  {id:'serve',label:'發球',key:'s'},{id:'return',label:'接發',key:'r'},
+  {id:'drop',label:'放小球',key:'d'},{id:'drive',label:'抽球',key:'v'},
+  {id:'dink',label:'Dink',key:'k'},{id:'volley',label:'截擊',key:'y'},
+  {id:'lob',label:'高吊球',key:'l'},{id:'smash',label:'殺球',key:'x'},
+  {id:'erne',label:'Erne',key:'e'},{id:'atp',label:'ATP 繞柱',key:'a'},
+  {id:'other',label:'其他',key:'o'}];
+const SHOT_LABEL=Object.fromEntries(SHOTS.map(s=>[s.id,s.label]));
+const OUT={W:'致勝球',U:'非受迫失誤',F:'受迫失誤'};
+const SPEEDS=[0.25,0.5,1,1.5,2];
+const CORNER_NAMES=['近端左','近端右','遠端右','遠端左'];
+const COURT=[[0,0],[20,0],[20,44],[0,44]]; // 英尺：寬 20、長 44；y=0 近端底線
+const other=t=>t==='A'?'B':'A';
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=t=>{t=Math.max(0,t||0);const m=Math.floor(t/60),s=Math.floor(t%60);return m+':'+String(s).padStart(2,'0');};
+const fmtD=t=>fmt(t)+'.'+Math.floor(((t||0)%1)*10);
+const uid=()=>Math.random().toString(36).slice(2,10);
+const pct=(a,b)=>b?Math.round(a/b*100)+'%':'—';
+
+const video=$('#video'),canvas=$('#overlay'),ctx=canvas.getContext('2d');
+let S=load(),NEXT=null,calibPts=null,stopAt=null,focusId=null,pendingDel=null,showLines=true,tab='analyze',landFilter='all';
+
+function defaults(){return{v:1,match:{teamA:'我方',teamB:'對手',players:['A1','A2','B1','B2'],mode:'doubles',firstServe:'A',videoName:''},calib:null,rallies:[],cur:null};}
+function load(){try{const j=JSON.parse(localStorage.getItem(KEY));if(j&&j.v===1&&Array.isArray(j.rallies))return j;}catch(e){}return defaults();}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+let toastT;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2400);}
+
+const isDoubles=()=>S.match.mode!=='singles';
+const teamName=t=>t==='A'?(S.match.teamA||'A'):(S.match.teamB||'B');
+const pName=p=>S.match.players[p]||['A1','A2','B1','B2'][p];
+const pTeam=p=>p<2?'A':'B';
+const slots=()=>isDoubles()?[0,1,2,3]:[0,2];
+function shotTeam(r,i,serveTeam){const s=r.shots[i];if(s.player!=null)return pTeam(s.player);return i%2===0?serveTeam:other(serveTeam);}
+function rallyWinner(r){
+  if(r.manualWinner)return r.manualWinner;
+  if(!r.outcome||!r.shots.length)return null;
+  const lt=shotTeam(r,r.shots.length-1,r.serveTeam);
+  return r.outcome==='W'?lt:other(lt);
+}
+
+/* ---------- 記分（重播所有回合） ---------- */
+function replay(){
+  const d=isDoubles();
+  let first=S.match.firstServe||'A',serving=first,num=d?2:1,sc={A:0,B:0},games={A:0,B:0},game=1;
+  S.rallies.sort((a,b)=>a.start-b.start);
+  for(const r of S.rallies){
+    r.game=game;r.serveTeam=serving;r.serverNum=num;r.before={A:sc.A,B:sc.B};
+    r.winner=rallyWinner(r);r.gameEnd=null;
+    if(r.winner){
+      if(r.winner===serving)sc[serving]++;
+      else if(d&&num===1)num=2;
+      else{serving=other(serving);num=1;}
+    }
+    r.after={A:sc.A,B:sc.B};
+    const gw=sc.A>=11&&sc.A-sc.B>=2?'A':(sc.B>=11&&sc.B-sc.A>=2?'B':null);
+    if(gw){r.gameEnd=gw;games[gw]++;game++;sc={A:0,B:0};first=other(first);serving=first;num=d?2:1;}
+  }
+  return{serving,num,sc,games,game};
+}
+function callScore(sc,serving,num){return sc[serving]+' – '+sc[other(serving)]+(isDoubles()?' – '+num:'');}
+
+/* ---------- 單應性矩陣（球場校正） ---------- */
+function solveH(src,dst){
+  const A=[],b=[];
+  for(let i=0;i<4;i++){const[x,y]=src[i],[u,v]=dst[i];
+    A.push([x,y,1,0,0,0,-u*x,-u*y]);b.push(u);
+    A.push([0,0,0,x,y,1,-v*x,-v*y]);b.push(v);}
+  for(let c=0;c<8;c++){
+    let p=c;for(let r=c+1;r<8;r++)if(Math.abs(A[r][c])>Math.abs(A[p][c]))p=r;
+    if(Math.abs(A[p][c])<1e-12)return null;
+    [A[c],A[p]]=[A[p],A[c]];[b[c],b[p]]=[b[p],b[c]];
+    for(let r=0;r<8;r++){if(r===c)continue;const f=A[r][c]/A[c][c];if(!f)continue;for(let k=c;k<8;k++)A[r][k]-=f*A[c][k];b[r]-=f*b[c];}
+  }
+  const h=b.map((v,i)=>v/A[i][i]);h.push(1);return h;
+}
+function applyH(h,x,y){const w=h[6]*x+h[7]*y+h[8];return[(h[0]*x+h[1]*y+h[2])/w,(h[3]*x+h[4]*y+h[5])/w];}
+function setCalib(pts){const H=solveH(COURT,pts),Hi=solveH(pts,COURT);if(!H||!Hi)return false;S.calib={pts,H,Hi};return true;}
+const inKitchen=l=>l&&l[0]>=-0.3&&l[0]<=20.3&&Math.abs(l[1]-22)<=7;
+const inCourt=l=>l&&l[0]>=-0.3&&l[0]<=20.3&&l[1]>=-0.3&&l[1]<=44.3;
+
+/* ---------- 畫面疊加 ---------- */
+function drawOverlay(){
+  const rc=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
+  const W=Math.max(1,Math.round(rc.width*dpr)),H=Math.max(1,Math.round(rc.height*dpr));
+  if(canvas.width!==W||canvas.height!==H){canvas.width=W;canvas.height=H;}
+  ctx.clearRect(0,0,W,H);
+  if(calibPts){
+    ctx.strokeStyle='#D7F25C';ctx.lineWidth=2*dpr;ctx.setLineDash([8*dpr,6*dpr]);ctx.beginPath();
+    calibPts.forEach((p,i)=>i?ctx.lineTo(p[0]*W,p[1]*H):ctx.moveTo(p[0]*W,p[1]*H));ctx.stroke();ctx.setLineDash([]);
+    calibPts.forEach((p,i)=>{ctx.fillStyle='#D7F25C';ctx.beginPath();ctx.arc(p[0]*W,p[1]*H,7*dpr,0,7);ctx.fill();
+      ctx.font=(13*dpr)+'px Noto Sans TC';ctx.fillText(CORNER_NAMES[i],p[0]*W+10*dpr,p[1]*H-10*dpr);});
+    return;
+  }
+  if(!S.calib)return;
+  const h=S.calib.H,P=(x,y)=>{const q=applyH(h,x,y);return[q[0]*W,q[1]*H];};
+  if(showLines){
+    ctx.fillStyle='rgba(215,242,92,0.13)';ctx.beginPath();[[0,15],[20,15],[20,29],[0,29]].forEach((c,i)=>{const q=P(c[0],c[1]);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);});ctx.closePath();ctx.fill();
+    ctx.strokeStyle='#D7F25C';ctx.lineWidth=2*dpr;ctx.beginPath();
+    const L=(a,b,c,d)=>{const p=P(a,b),q=P(c,d);ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);};
+    L(0,0,20,0);L(20,0,20,44);L(20,44,0,44);L(0,44,0,0);L(0,15,20,15);L(0,29,20,29);L(10,0,10,15);L(10,29,10,44);
+    ctx.stroke();
+    ctx.strokeStyle='#FFFFFF';ctx.lineWidth=3*dpr;ctx.beginPath();L(-1,22,21,22);ctx.stroke();
+  }
+  const r=S.cur||S.rallies.find(x=>x.id===focusId);
+  if(r){
+    const st=S.cur?NEXT.serving:r.serveTeam;
+    r.shots.forEach((s,i)=>{if(!s.land)return;const q=P(s.land[0],s.land[1]);const t=shotTeam(r,i,st);
+      ctx.fillStyle=t==='A'?'#D7F25C':'#5AB0FF';ctx.strokeStyle='#0E1316';ctx.lineWidth=2*dpr;
+      ctx.beginPath();ctx.arc(q[0],q[1],9*dpr,0,7);ctx.fill();ctx.stroke();
+      ctx.fillStyle='#0E1316';ctx.font='700 '+(11*dpr)+'px Space Grotesk';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(i+1),q[0],q[1]+0.5);
+      ctx.textAlign='start';ctx.textBaseline='alphabetic';});
+  }
+}
+
+/* ---------- 影片 ---------- */
+function loadVideo(f){
+  if(!f)return;
+  if(video.src&&video.src.startsWith('blob:'))URL.revokeObjectURL(video.src);
+  video.src=URL.createObjectURL(f);S.match.videoName=f.name;save();
+  $('#drop').hidden=true;$('#stageWrap').hidden=false;focusId=null;
+}
+video.addEventListener('loadedmetadata',()=>{
+  if(video.videoWidth)$('#stage').style.aspectRatio=video.videoWidth+' / '+video.videoHeight;
+  requestAnimationFrame(()=>{drawOverlay();renderTimeline();});
+  if(!S.calib)toast('先按「球場校正」點出四個角，才能記錄落點');
+});
+video.addEventListener('error',()=>toast('這個影片格式瀏覽器無法播放，請轉成 MP4 (H.264) 再試'));
+video.addEventListener('timeupdate',()=>{
+  if(stopAt!=null&&video.currentTime>=stopAt){video.pause();stopAt=null;}
+  updateTime();
+});
+video.addEventListener('play',updatePlayIcon);video.addEventListener('pause',updatePlayIcon);
+function updatePlayIcon(){$('#playIcon').setAttribute('d',video.paused?'M5 3 L15 9 L5 15 Z':'M4 3 H7.5 V15 H4 Z M10.5 3 H14 V15 H10.5 Z');}
+function updateTime(){
+  $('#timeLabel').textContent=fmtD(video.currentTime)+' / '+fmt(video.duration||0);
+  const d=duration();$('#playhead').style.left=(d?video.currentTime/d*100:0)+'%';
+}
+function duration(){if(video.duration&&isFinite(video.duration))return video.duration;let m=0;S.rallies.forEach(r=>m=Math.max(m,r.end||0));return m;}
+function seek(t){stopAt=null;video.currentTime=Math.max(0,Math.min(t,video.duration||t));updateTime();}
+function togglePlay(){if(!video.src)return;video.paused?video.play().catch(()=>{}):video.pause();}
+function setSpeed(v){video.playbackRate=v;renderSpeeds();}
+function changeSpeed(dir){const i=SPEEDS.indexOf(video.playbackRate);const j=Math.max(0,Math.min(SPEEDS.length-1,(i<0?2:i)+dir));setSpeed(SPEEDS[j]);toast('速度 '+SPEEDS[j]+'x');}
+function playRally(r){
+  if(!video.src){toast('請先選擇影片');return;}
+  switchTab('analyze');focusId=r.id;video.currentTime=r.start;stopAt=r.end;video.play().catch(()=>{});renderTimeline();drawOverlay();
+}
+
+/* ---------- 標記 ---------- */
+function needVideo(){if(!video.src){toast('請先選擇影片');return true;}return false;}
+function ensureCur(){if(!S.cur){S.cur={id:uid(),start:Math.max(0,video.currentTime-1),shots:[]};focusId=null;}}
+function addShot(type){
+  if(needVideo())return;ensureCur();
+  S.cur.shots.push({t:video.currentTime,type,player:null,land:null});
+  commit();
+}
+function setPlayer(n){
+  const p=slots()[n-1];if(p==null)return;
+  if(!S.cur||!S.cur.shots.length){toast('先標記一拍，再指定擊球者');return;}
+  const s=S.cur.shots[S.cur.shots.length-1];s.player=s.player===p?null:p;commit();
+}
+function endRally(o){
+  if(!S.cur||!S.cur.shots.length){toast('先標記至少一拍');return;}
+  S.cur.outcome=o;S.cur.end=Math.max(video.currentTime+0.5,S.cur.start+0.5);
+  const r=S.cur;S.rallies.push(r);S.cur=null;commit();
+  toast(OUT[o]+' → '+teamName(r.winner)+' 贏得這一分');
+}
+function manualWin(t){
+  if(needVideo())return;ensureCur();
+  S.cur.manualWinner=t;S.cur.outcome=null;S.cur.end=Math.max(video.currentTime+0.5,S.cur.start+0.5);
+  S.rallies.push(S.cur);S.cur=null;commit();toast(teamName(t)+' 贏得這一分');
+}
+function undo(){
+  if(S.cur){S.cur.shots.pop();if(!S.cur.shots.length)S.cur=null;}
+  else if(S.rallies.length){
+    let idx=S.rallies.length-1;
+    const r=S.rallies.splice(idx,1)[0];delete r.outcome;delete r.manualWinner;delete r.end;
+    if(!r.shots.length){commit();toast('已刪除最後一個回合');return;}
+    S.cur=r;toast('已重新打開最後一個回合');
+  }
+  commit();
+}
+function deleteRally(id){S.rallies=S.rallies.filter(r=>r.id!==id);if(focusId===id)focusId=null;commit();toast('已刪除回合');}
+
+/* ---------- 校正與點擊 ---------- */
+function startCalib(){
+  if(needVideo())return;video.pause();calibPts=[];switchTab('analyze');updateBanner();drawOverlay();
+}
+function updateBanner(){
+  const b=$('#banner');
+  if(calibPts){b.hidden=false;b.textContent='球場校正：點選「'+CORNER_NAMES[calibPts.length]+'」角（'+(calibPts.length+1)+'/4）· Esc 取消';}
+  else if(S.cur&&S.cur.shots.length&&S.calib&&!S.cur.shots[S.cur.shots.length-1].land){b.hidden=false;b.textContent='點擊畫面記錄第 '+S.cur.shots.length+' 拍的落點（可略過）';}
+  else b.hidden=true;
+}
+canvas.addEventListener('click',e=>{
+  const rc=canvas.getBoundingClientRect();const u=(e.clientX-rc.left)/rc.width,v=(e.clientY-rc.top)/rc.height;
+  if(calibPts){
+    calibPts.push([u,v]);
+    if(calibPts.length===4){const ok=setCalib(calibPts);calibPts=null;commit();toast(ok?'校正完成！球場線已疊在畫面上':'校正失敗，請按順序重新點四個角');}
+    else{updateBanner();drawOverlay();}
+    return;
+  }
+  if(S.cur&&S.cur.shots.length&&S.calib){
+    const s=S.cur.shots[S.cur.shots.length-1];const c=applyH(S.calib.Hi,u,v);
+    s.land=[Math.round(c[0]*10)/10,Math.round(c[1]*10)/10];commit();
+    toast(inCourt(s.land)?(inKitchen(s.land)?'落點：廚房區內':'落點已記錄'):'落點：出界');return;
+  }
+  togglePlay();
+});
+
+/* ---------- 畫面渲染 ---------- */
+function commit(){NEXT=replay();save();renderAll();}
+function renderAll(){
+  $('#matchTitle').textContent=(S.match.teamA||'A')+' vs '+(S.match.teamB||'B')+(S.match.videoName?' · '+S.match.videoName:'');
+  $('#lgA').textContent=teamName('A');$('#lgB').textContent=teamName('B');
+  $('#winA').textContent='直接判 '+teamName('A')+' 得分';$('#winB').textContent='直接判 '+teamName('B')+' 得分';
+  renderScore();renderCur();renderPlayers();renderRallyList();renderTimeline();updateBanner();drawOverlay();
+  if(tab==='report')renderReport();
+  if(tab==='setup')renderSetup();
+}
+function renderScore(){
+  const n=NEXT;$('#bigScore').textContent=callScore(n.sc,n.serving,n.num);
+  $('#serveInfo').textContent='發球：'+teamName(n.serving)+(isDoubles()?'（第 '+n.num+' 發球員）':'');
+  $('#gamesInfo').textContent='第 '+n.game+' 局 · 局數 '+teamName('A')+' '+n.games.A+' : '+n.games.B+' '+teamName('B');
+  $('#hudScore').textContent=callScore(n.sc,n.serving,n.num);
+  $('#hudRally').textContent=S.cur?'回合進行中 · 第 '+S.cur.shots.length+' 拍':'回合 '+(S.rallies.length+1)+' 待開始';
+}
+function renderCur(){
+  const ol=$('#chips');
+  $('#curTitle').textContent=S.cur?'目前回合 · '+S.cur.shots.length+' 拍':'目前回合';
+  if(!S.cur){ol.innerHTML='';$('#curHint').textContent='在擊球瞬間按擊球鍵（例如 S 發球）就會開始新回合。';return;}
+  ol.innerHTML=S.cur.shots.map((s,i)=>{const t=shotTeam(S.cur,i,NEXT.serving);
+    return '<li class="chip '+t+'"><span class="n">'+(i+1)+'</span>'+esc(SHOT_LABEL[s.type])+(s.player!=null?' · '+esc(pName(s.player)):'')+(s.land?(inKitchen(s.land)?' ●廚':' ●'):'')+'</li>';}).join('');
+  $('#curHint').textContent=S.calib?'按完擊球鍵可點畫面記錄落點；按 1–4 指定擊球者。':'完成球場校正後即可記錄落點。';
+}
+function renderPlayers(){
+  const sl=slots();
+  $('#playerBtns').innerHTML=sl.map((p,i)=>{
+    const last=S.cur&&S.cur.shots.length?S.cur.shots[S.cur.shots.length-1]:null;
+    const on=last&&last.player===p;
+    return '<button class="keybtn p'+pTeam(p)+(on?' on':'')+'" data-player="'+(i+1)+'"><span style="color:'+(pTeam(p)==='A'?'#E4F79A':'#A9D4FF')+'">'+esc(pName(p))+'</span><kbd>'+(i+1)+'</kbd></button>';}).join('');
+  $('#playerBtns').className=sl.length===4?'grid4':'grid2';
+}
+function renderSpeeds(){
+  $('#speeds').innerHTML=SPEEDS.map(s=>'<button data-speed="'+s+'" aria-pressed="'+(video.playbackRate===s)+'">'+s+'x</button>').join('');
+}
+function renderRallyList(){
+  $('#rCount').textContent=S.rallies.length?'· '+S.rallies.length:'';
+  const ul=$('#rallyList');
+  if(!S.rallies.length){ul.innerHTML='<li class="muted" style="background:none;padding:4px 0">還沒有完成的回合</li>';return;}
+  ul.innerHTML=S.rallies.map((r,i)=>({r,i})).reverse().map(({r,i})=>{
+    const last=r.shots.length?r.shots[r.shots.length-1]:null;
+    const who=last&&last.player!=null?' · '+esc(pName(last.player)):'';
+    const desc=r.manualWinner?'手動判定':(OUT[r.outcome]||'未完成')+who;
+    return '<li><span class="dot '+(r.winner||'N')+'"></span><div class="info"><b>#'+(i+1)+'</b> <span class="num">'+callScore(r.before,r.serveTeam,r.serverNum)+'</span> · '+r.shots.length+' 拍<small>'+desc+' · '+fmt(r.start)+(r.gameEnd?' · 本局結束':'')+'</small></div>'+
+      '<button class="btn small" data-play="'+r.id+'" aria-label="播放回合 '+(i+1)+'">播放</button>'+
+      '<button class="btn small ghost danger" data-del="'+r.id+'" aria-label="刪除回合 '+(i+1)+'">'+(pendingDel===r.id?'確定刪除':'刪除')+'</button></li>';}).join('');
+}
+function renderTimeline(){
+  const tl=$('#timeline'),d=duration();
+  [...tl.querySelectorAll('.blk,.cur')].forEach(n=>n.remove());
+  const done=S.rallies.reduce((a,r)=>a+((r.end||0)-r.start),0);
+  $('#tlInfo').textContent=S.rallies.length?'· '+S.rallies.length+' 個回合，實際對打 '+fmt(done)+(d?' / 影片 '+fmt(d):''):'· 標記後會顯示在這裡';
+  if(!d)return;
+  S.rallies.forEach((r,i)=>{const b=document.createElement('button');b.className='blk '+(r.winner||'N')+(r.id===focusId?' focus':'');
+    b.style.left=(r.start/d*100)+'%';b.style.width=(Math.max(0.3,((r.end||r.start+1)-r.start)/d*100))+'%';
+    b.setAttribute('aria-label','回合 '+(i+1)+'，'+r.shots.length+' 拍');b.title='#'+(i+1)+' · '+r.shots.length+' 拍';b.dataset.play=r.id;tl.appendChild(b);});
+  if(S.cur){const c=document.createElement('div');c.className='cur';c.style.left=(S.cur.start/d*100)+'%';c.style.width=Math.max(0.3,(Math.max(video.currentTime,S.cur.start+1)-S.cur.start)/d*100)+'%';tl.appendChild(c);}
+  updateTime();
+}
+
+/* ---------- 報告 ---------- */
+function stats(){
+  const R=S.rallies.filter(r=>r.winner);
+  const T={A:{},B:{}};['A','B'].forEach(t=>Object.assign(T[t],{won:0,srv:0,srvWon:0,rcv:0,rcvWon:0,W:0,U:0,F:0,shots:{},drops:0,dropOk:0,third:{}}));
+  const P={};[0,1,2,3].forEach(p=>P[p]={W:0,U:0,F:0,shots:0,drops:0,dropOk:0});
+  const UE={};let shotsTotal=0,maxLen=0;const lands=[];
+  R.forEach(r=>{
+    const st=r.serveTeam;T[r.winner].won++;
+    T[st].srv++;if(r.winner===st)T[st].srvWon++;
+    T[other(st)].rcv++;if(r.winner!==st)T[other(st)].rcvWon++;
+    shotsTotal+=r.shots.length;maxLen=Math.max(maxLen,r.shots.length);
+    r.shots.forEach((s,i)=>{const t=shotTeam(r,i,st);T[t].shots[s.type]=(T[t].shots[s.type]||0)+1;if(s.player!=null)P[s.player].shots++;
+      if(s.land)lands.push({land:s.land,team:t,type:s.type});});
+    if(r.shots.length>=3){const s=r.shots[2],t=shotTeam(r,2,st);T[t].third[s.type]=(T[t].third[s.type]||0)+1;
+      if(s.type==='drop'){const failErr=r.shots.length===3&&(r.outcome==='U'||r.outcome==='F');
+        const ok=!failErr&&(!s.land||inKitchen(s.land));T[t].drops++;if(ok)T[t].dropOk++;
+        if(s.player!=null){P[s.player].drops++;if(ok)P[s.player].dropOk++;}}}
+    if(r.outcome&&r.shots.length){const i=r.shots.length-1,s=r.shots[i],t=shotTeam(r,i,st);T[t][r.outcome]++;if(s.player!=null)P[s.player][r.outcome]++;
+      if(r.outcome==='U'){UE[t]=UE[t]||{};UE[t][s.type]=(UE[t][s.type]||0)+1;}}
+  });
+  return{R,T,P,UE,shotsTotal,maxLen,lands};
+}
+function courtSvg(lands){
+  const s=14,m=30,X=y=>m+y*s,Y=x=>m+x*s;
+  const pts=lands.filter(l=>landFilter==='all'||l.type===landFilter).map(l=>{
+    const ok=inCourt(l.land);return '<circle cx="'+X(l.land[1]).toFixed(1)+'" cy="'+Y(l.land[0]).toFixed(1)+'" r="6" fill="'+(l.team==='A'?'#D7F25C':'#5AB0FF')+'" fill-opacity="'+(ok?0.9:0.35)+'" stroke="#0E1316" stroke-width="1.5"><title>'+esc(SHOT_LABEL[l.type])+'</title></circle>';}).join('');
+  return '<svg viewBox="0 0 '+(44*s+2*m)+' '+(20*s+2*m)+'" style="width:100%;max-width:880px;margin:0 auto;height:auto;display:block" role="img" aria-label="俯視球場落點圖">'+
+    '<rect x="'+m+'" y="'+m+'" width="'+44*s+'" height="'+20*s+'" fill="#1E4A6A" stroke="#EAF0F2" stroke-width="2"/>'+
+    '<rect x="'+X(15)+'" y="'+m+'" width="'+14*s+'" height="'+20*s+'" fill="#D7F25C" fill-opacity="0.1"/>'+
+    '<g stroke="#EAF0F2" stroke-width="2"><line x1="'+X(15)+'" y1="'+m+'" x2="'+X(15)+'" y2="'+Y(20)+'"/><line x1="'+X(29)+'" y1="'+m+'" x2="'+X(29)+'" y2="'+Y(20)+'"/>'+
+    '<line x1="'+m+'" y1="'+Y(10)+'" x2="'+X(15)+'" y2="'+Y(10)+'"/><line x1="'+X(29)+'" y1="'+Y(10)+'" x2="'+X(44)+'" y2="'+Y(10)+'"/></g>'+
+    '<line x1="'+X(22)+'" y1="'+(m-10)+'" x2="'+X(22)+'" y2="'+(Y(20)+10)+'" stroke="#EAF0F2" stroke-width="5"/>'+
+    '<text x="'+m+'" y="'+(Y(20)+22)+'" fill="#9DAAB1" font-size="13">近端（鏡頭側）</text><text x="'+X(44)+'" y="'+(Y(20)+22)+'" fill="#9DAAB1" font-size="13" text-anchor="end">遠端</text>'+pts+'</svg>';
+}
+function renderReport(){
+  const el=$('#report');const st=stats();const{R,T,P,UE}=st;const A=teamName('A'),B=teamName('B');
+  if(!R.length){el.innerHTML='<div class="card empty">還沒有完成的回合。到「分析」頁標記幾個回合後，這裡會自動產生報告。</div>';return;}
+  const n=NEXT;
+  const tile=(l,v,s)=>'<div class="card kpi"><div class="l">'+l+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div></div>';
+  const vs=(a,b)=>'<span style="color:#D7F25C">'+a+'</span> <span class="muted" style="font-size:20px">:</span> <span style="color:#5AB0FF">'+b+'</span>';
+  let h='<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;align-items:flex-end"><div><p class="muted" style="margin:0 0 6px">'+esc(S.match.videoName||'')+' · '+(isDoubles()?'雙打':'單打')+' · '+R.length+' 個回合</p><h1 style="margin:0;font-size:28px">比賽報告 · '+esc(A)+' vs '+esc(B)+'</h1></div></div>';
+  h+='<div class="kpis">'+
+    tile('局數 / 目前比分',vs(n.games.A,n.games.B),'目前 '+callScore(n.sc,n.serving,n.num))+
+    tile('平均回合拍數',(st.shotsTotal/R.length).toFixed(1),'最長 '+st.maxLen+' 拍')+
+    tile('第三拍放小球成功率',vs(pct(T.A.dropOk,T.A.drops),pct(T.B.dropOk,T.B.drops)),T.A.dropOk+'/'+T.A.drops+' vs '+T.B.dropOk+'/'+T.B.drops)+
+    tile('致勝球',vs(T.A.W,T.B.W),'回合最後一拍得分')+
+    tile('非受迫失誤',vs(T.A.U,T.B.U),'越少越好')+'</div>';
+  const tr=(l,a,b)=>'<tr><td>'+l+'</td><td class="n">'+a+'</td><td class="n">'+b+'</td></tr>';
+  h+='<div class="row"><div class="card"><h2>雙方比較</h2><div class="tablewrap"><table><thead><tr><th></th><th style="color:#E4F79A">'+esc(A)+'</th><th style="color:#A9D4FF">'+esc(B)+'</th></tr></thead><tbody>'+
+    tr('贏得回合',T.A.won,T.B.won)+
+    tr('發球時得分率',pct(T.A.srvWon,T.A.srv)+' ('+T.A.srvWon+'/'+T.A.srv+')',pct(T.B.srvWon,T.B.srv)+' ('+T.B.srvWon+'/'+T.B.srv+')')+
+    tr('接發時贏回合率',pct(T.A.rcvWon,T.A.rcv)+' ('+T.A.rcvWon+'/'+T.A.rcv+')',pct(T.B.rcvWon,T.B.rcv)+' ('+T.B.rcvWon+'/'+T.B.rcv+')')+
+    tr('致勝球',T.A.W,T.B.W)+tr('非受迫失誤',T.A.U,T.B.U)+tr('受迫失誤',T.A.F,T.B.F)+
+    tr('第三拍放小球成功',pct(T.A.dropOk,T.A.drops),pct(T.B.dropOk,T.B.drops))+
+    '</tbody></table></div></div>';
+  // 球員
+  const pr=slots().map(p=>'<tr><td style="color:'+(pTeam(p)==='A'?'#E4F79A':'#A9D4FF')+'">'+esc(pName(p))+'</td><td class="n">'+P[p].shots+'</td><td class="n">'+P[p].W+'</td><td class="n">'+P[p].U+'</td><td class="n">'+P[p].F+'</td><td class="n">'+(P[p].drops?P[p].dropOk+'/'+P[p].drops:'—')+'</td></tr>').join('');
+  h+='<div class="card"><h2>球員表現</h2><div class="tablewrap"><table><thead><tr><th>球員</th><th>擊球數</th><th>致勝球</th><th>非受迫失誤</th><th>受迫失誤</th><th>第三拍放小球</th></tr></thead><tbody>'+pr+'</tbody></table></div><p class="muted" style="font-size:12px;margin:10px 0 0">只統計有指定擊球者（按 1–4）的球。</p></div></div>';
+  // 擊球分布
+  const types=SHOTS.map(s=>s.id).filter(id=>(T.A.shots[id]||0)+(T.B.shots[id]||0)>0);
+  const mx=Math.max(1,...types.map(id=>Math.max(T.A.shots[id]||0,T.B.shots[id]||0)));
+  const bars=types.map(id=>{const a=T.A.shots[id]||0,b=T.B.shots[id]||0;return '<div class="bar"><span>'+esc(SHOT_LABEL[id])+'</span><div class="track"><span class="a" style="width:'+(a/mx*100)+'%"></span><span class="b" style="width:'+(b/mx*100)+'%"></span></div><span class="num muted" style="text-align:right">'+a+' / '+b+'</span></div>';}).join('');
+  const ueList=['A','B'].map(t=>{const u=UE[t]||{};const ks=Object.keys(u).sort((x,y)=>u[y]-u[x]);return '<div><b style="color:'+(t==='A'?'#E4F79A':'#A9D4FF')+'">'+esc(teamName(t))+'</b><div class="muted" style="margin-top:4px">'+(ks.length?ks.map(k=>esc(SHOT_LABEL[k])+' '+u[k]).join('、'):'沒有')+'</div></div>';}).join('');
+  const third=['A','B'].map(t=>{const x=T[t].third;const ks=Object.keys(x).sort((a,b)=>x[b]-x[a]);return '<div><b style="color:'+(t==='A'?'#E4F79A':'#A9D4FF')+'">'+esc(teamName(t))+'</b><div class="muted" style="margin-top:4px">'+(ks.length?ks.map(k=>esc(SHOT_LABEL[k])+' '+x[k]).join('、'):'沒有')+'</div></div>';}).join('');
+  h+='<div class="row"><div class="card"><h2>擊球分布 <span class="muted" style="font-weight:400;font-size:13px">（'+esc(A)+' / '+esc(B)+'）</span></h2>'+(bars||'<p class="muted">沒有資料</p>')+'</div>'+
+    '<div class="card"><h2>第三拍選擇</h2><div class="grid2">'+third+'</div><h2 style="margin-top:20px">非受迫失誤來自哪種球</h2><div class="grid2">'+ueList+'</div></div></div>';
+  // 落點
+  const opts='<option value="all">全部擊球</option>'+SHOTS.map(s=>'<option value="'+s.id+'"'+(landFilter===s.id?' selected':'')+'>'+s.label+'</option>').join('');
+  h+='<div class="card"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px"><h2 style="margin:0">落點圖 <span class="muted" style="font-weight:400;font-size:13px">· '+st.lands.length+' 個落點，淡色＝出界</span></h2><label class="muted" style="font-size:13px">篩選 <select class="inline" id="landSel">'+opts+'</select></label></div>'+
+    (st.lands.length?courtSvg(st.lands):'<p class="muted">還沒有落點資料。完成球場校正後，按完擊球鍵點一下畫面即可記錄。</p>')+'</div>';
+  // 回合表
+  const rows=S.rallies.map((r,i)=>{const last=r.shots[r.shots.length-1];return '<tr><td class="n">#'+(i+1)+'</td><td class="n">'+r.game+'</td><td class="n">'+callScore(r.before,r.serveTeam,r.serverNum)+'</td><td class="n">'+r.shots.length+'</td><td>'+esc(r.shots.map(s=>SHOT_LABEL[s.type]).join(' → '))+'</td><td>'+(r.manualWinner?'手動':(OUT[r.outcome]||'—'))+(last&&last.player!=null?' · '+esc(pName(last.player)):'')+'</td><td><span class="dot '+(r.winner||'N')+'" style="display:inline-block;margin-right:6px"></span>'+esc(r.winner?teamName(r.winner):'—')+'</td><td><button class="btn small" data-play="'+r.id+'">播放 '+fmt(r.start)+'</button></td></tr>';}).join('');
+  h+='<div class="card"><h2>所有回合</h2><div class="tablewrap"><table><thead><tr><th>回合</th><th>局</th><th>開始比分</th><th>拍數</th><th>擊球序列</th><th>結果</th><th>得分方</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  el.innerHTML=h;
+}
+
+/* ---------- 設定 ---------- */
+function renderSetup(){
+  const m=S.match;
+  const set=(id,v)=>{const e=$(id);if(document.activeElement!==e)e.value=v;};
+  set('#fTeamA',m.teamA);set('#fTeamB',m.teamB);set('#fMode',m.mode);set('#fFirst',m.firstServe);
+  [0,1,2,3].forEach(i=>set('#fP'+i,m.players[i]||''));
+  $('#fP1w').hidden=$('#fP3w').hidden=!isDoubles();
+  $('#calibStatus').textContent=S.calib?'已校正。換了拍攝角度或影片時請重新校正。':'尚未校正。校正後才能記錄落點、畫出球場線。';
+}
+[['#fTeamA','teamA'],['#fTeamB','teamB'],['#fMode','mode'],['#fFirst','firstServe']].forEach(([id,k])=>$(id).addEventListener('input',e=>{S.match[k]=e.target.value;commit();}));
+[0,1,2,3].forEach(i=>$('#fP'+i).addEventListener('input',e=>{S.match.players[i]=e.target.value;commit();}));
+let resetArm=false;
+$('#btnReset').addEventListener('click',e=>{
+  if(!resetArm){resetArm=true;e.target.textContent='再按一次確認清除';setTimeout(()=>{resetArm=false;e.target.textContent='清除全部標記';},3000);return;}
+  resetArm=false;e.target.textContent='清除全部標記';S.rallies=[];S.cur=null;focusId=null;commit();toast('已清除全部標記');
+});
+$('#btnCalib2').addEventListener('click',()=>{switchTab('analyze');startCalib();});
+
+/* ---------- 匯出匯入 ---------- */
+function csv(){
+  const head=['rally','game','start','end','serve_team','score_before','shot_no','time','shot','team','player','land_x_ft','land_y_ft','outcome','winner'];
+  const q=v=>{v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+  const lines=[head.join(',')];
+  S.rallies.forEach((r,i)=>r.shots.forEach((s,j)=>lines.push([i+1,r.game,r.start.toFixed(2),(r.end||0).toFixed(2),teamName(r.serveTeam),callScore(r.before,r.serveTeam,r.serverNum),j+1,s.t.toFixed(2),SHOT_LABEL[s.type],teamName(shotTeam(r,j,r.serveTeam)),s.player!=null?pName(s.player):'',s.land?s.land[0]:'',s.land?s.land[1]:'',r.manualWinner?'manual':(r.outcome?OUT[r.outcome]:''),r.winner?teamName(r.winner):''].map(q).join(','))));
+  return '﻿'+lines.join('\n');
+}
+async function download(name,text,type){
+  try{if(window.claude&&window.claude.use){const dl=await window.claude.use('downloads');if(dl){await dl.save({filename:name,data:text});return;}}}catch(e){toast('下載已取消或被擋，可改用複製');return;}
+  try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove();toast('已開始下載（若沒反應，請改用複製）');}catch(e){toast('下載被擋住了，請改用複製');}}
+async function copy(text){try{await navigator.clipboard.writeText(text);toast('已複製');}catch(e){const t=$('#mText');t.value=text;t.select();toast('請按 Ctrl/⌘+C 複製選取的內容');}}
+const baseName=()=>(S.match.teamA+'_vs_'+S.match.teamB).replace(/[^\w一-鿿-]+/g,'_');
+function openModal(){$('#mText').value=JSON.stringify(S,null,1);$('#modal').hidden=false;$('#mClose').focus();}
+function closeModal(){$('#modal').hidden=true;}
+function importText(txt){try{const j=JSON.parse(txt);if(!j||j.v!==1||!Array.isArray(j.rallies))throw 0;S=j;S.cur=S.cur||null;commit();closeModal();toast('匯入成功：'+S.rallies.length+' 個回合');}catch(e){toast('格式不正確，無法匯入');}}
+$('#btnData').addEventListener('click',openModal);$('#mClose').addEventListener('click',closeModal);
+$('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal();});
+$('#mCopy').addEventListener('click',()=>copy($('#mText').value));
+$('#mCopyCsv').addEventListener('click',()=>copy(csv()));
+$('#mDlJson').addEventListener('click',()=>download(baseName()+'.json',JSON.stringify(S,null,1),'application/json'));
+$('#mDlCsv').addEventListener('click',()=>download(baseName()+'.csv',csv(),'text/csv'));
+$('#mImport').addEventListener('click',()=>importText($('#mText').value));
+$('#mFile').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;f.text().then(importText);e.target.value='';});
+
+/* ---------- 分頁 ---------- */
+function switchTab(t){
+  tab=t;['analyze','report','setup'].forEach(x=>{$('#view-'+x).hidden=x!==t;});
+  document.querySelectorAll('.tabs button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===t)));
+  try{if(location.hash!=='#'+t)history.replaceState(null,'','#'+t);}catch(e){}
+  if(t==='report')renderReport();if(t==='setup')renderSetup();if(t==='analyze')requestAnimationFrame(()=>{drawOverlay();updateTime();});
+}
+document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
+window.addEventListener('hashchange',()=>{const h=location.hash.slice(1);if(['analyze','report','setup'].includes(h)&&h!==tab)switchTab(h);});
+
+/* ---------- 事件 ---------- */
+$('#shotBtns').innerHTML=SHOTS.map(s=>'<button class="keybtn" data-shot="'+s.id+'">'+s.label+'<kbd>'+s.key.toUpperCase()+'</kbd></button>').join('');
+$('#outBtns').innerHTML=Object.keys(OUT).map(k=>'<button class="keybtn" data-out="'+k+'" style="font-size:13px">'+OUT[k]+'<kbd>'+k+'</kbd></button>').join('');
+document.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.shot)addShot(b.dataset.shot);
+  else if(b.dataset.out)endRally(b.dataset.out);
+  else if(b.dataset.player)setPlayer(+b.dataset.player);
+  else if(b.dataset.speed)setSpeed(+b.dataset.speed);
+  else if(b.dataset.play){const r=S.rallies.find(x=>x.id===b.dataset.play);if(r)playRally(r);}
+  else if(b.dataset.del){if(pendingDel===b.dataset.del){pendingDel=null;deleteRally(b.dataset.del);}else{pendingDel=b.dataset.del;renderRallyList();setTimeout(()=>{if(pendingDel===b.dataset.del){pendingDel=null;renderRallyList();}},3000);}}
+});
+$('#report').addEventListener('change',e=>{if(e.target.id==='landSel'){landFilter=e.target.value;renderReport();}});
+$('#timeline').addEventListener('click',e=>{if(e.target.id!=='timeline')return;const rc=e.currentTarget.getBoundingClientRect(),d=duration();if(d&&video.src)seek((e.clientX-rc.left)/rc.width*d);});
+$('#btnPlay').addEventListener('click',togglePlay);
+$('#btnBack').addEventListener('click',()=>seek(video.currentTime-5));
+$('#btnFwd').addEventListener('click',()=>seek(video.currentTime+5));
+$('#btnUndo').addEventListener('click',undo);
+$('#winA').addEventListener('click',()=>manualWin('A'));$('#winB').addEventListener('click',()=>manualWin('B'));
+$('#btnCalib').addEventListener('click',startCalib);
+$('#btnLines').addEventListener('click',e=>{showLines=!showLines;e.currentTarget.setAttribute('aria-pressed',String(showLines));drawOverlay();});
+['#fileInput','#fileInput2'].forEach(id=>$(id).addEventListener('change',e=>{loadVideo(e.target.files[0]);e.target.value='';}));
+const drop=$('#drop');
+['dragenter','dragover'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f&&f.type.startsWith('video'))loadVideo(f);else toast('請拖曳影片檔');});
+document.addEventListener('keydown',e=>{
+  if(e.target.closest&&e.target.closest('input,textarea,select'))return;
+  if(e.metaKey||e.ctrlKey||e.altKey)return;
+  if(!$('#modal').hidden){if(e.key==='Escape')closeModal();return;}
+  if(tab!=='analyze')return;
+  const k=e.key.length===1?e.key.toLowerCase():e.key;
+  if(k===' '){e.preventDefault();togglePlay();return;}
+  if(k==='ArrowLeft'||k==='ArrowRight'){e.preventDefault();if(!video.src)return;video.pause();seek(video.currentTime+(e.shiftKey?5:1/30)*(k==='ArrowLeft'?-1:1));return;}
+  if(k==='['){changeSpeed(-1);return;}if(k===']'){changeSpeed(1);return;}
+  if(k==='Backspace'){e.preventDefault();undo();return;}
+  if(k==='Escape'){if(calibPts){calibPts=null;updateBanner();drawOverlay();toast('已取消校正');}return;}
+  if(k==='c'){startCalib();return;}
+  const sh=SHOTS.find(s=>s.key===k);if(sh){e.preventDefault();addShot(sh.id);return;}
+  if(k==='w'||k==='u'||k==='f'){endRally(k.toUpperCase());return;}
+  if(/^[1-4]$/.test(k)){setPlayer(+k);return;}
+});
+if(window.ResizeObserver)new ResizeObserver(()=>drawOverlay()).observe($('#stage'));
+window.addEventListener('resize',drawOverlay);
+
+/* ---------- 啟動 ---------- */
+if(S.match.videoName&&(S.rallies.length||S.cur)){const lv=$('#lastVideo');lv.hidden=false;lv.textContent='上次的影片：'+S.match.videoName+'（標記已保存，請重新選擇同一支影片繼續）';}
+renderSpeeds();commit();
+const h0=location.hash.slice(1);switchTab(['analyze','report','setup'].includes(h0)?h0:'analyze');
+})();
+</script>
+</body>
+</html>
